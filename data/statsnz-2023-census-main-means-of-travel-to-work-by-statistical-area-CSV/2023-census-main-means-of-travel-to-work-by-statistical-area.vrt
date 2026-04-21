@@ -1,0 +1,34 @@
+<OGRVRTDataSource>
+  <OGRVRTLayer name="2023-census-main-means-of-travel-to-work-by-statistical-area">
+    <SrcDataSource relativeToVRT="1">2023-census-main-means-of-travel-to-work-by-statistical-area.csv</SrcDataSource>
+    <FeatureCount>65056</FeatureCount>
+    <Field name="SA22023_V1_00_usual_residence_address" src="SA22023_V1_00_usual_residence_address" type="String" />
+    <Field name="SA22023_V1_00_NAME_usual_residence_address" src="SA22023_V1_00_NAME_usual_residence_address" type="String" />
+    <Field name="SA22023_V1_00_NAME_ASCII_usual_residence_address" src="SA22023_V1_00_NAME_ASCII_usual_residence_address" type="String" />
+    <Field name="SA22023_V1_00_workplace_address" src="SA22023_V1_00_workplace_address" type="String" />
+    <Field name="SA22023_V1_00_NAME_workplace_address" src="SA22023_V1_00_NAME_workplace_address" type="String" />
+    <Field name="SA22023_V1_00_NAME_ASCII_workplace_address" src="SA22023_V1_00_NAME_ASCII_workplace_address" type="String" />
+    <Field name="2018_Work_at_home" src="2018_Work_at_home" type="String" />
+    <Field name="2018_Drive_a_private_car_truck_or_van" src="2018_Drive_a_private_car_truck_or_van" type="String" />
+    <Field name="2018_Drive_a_company_car_truck_or_van" src="2018_Drive_a_company_car_truck_or_van" type="String" />
+    <Field name="2018_Passenger_in_a_car_truck_van_or_company_bus" src="2018_Passenger_in_a_car_truck_van_or_company_bus" type="String" />
+    <Field name="2018_Public_bus" src="2018_Public_bus" type="String" />
+    <Field name="2018_Train" src="2018_Train" type="String" />
+    <Field name="2018_Bicycle" src="2018_Bicycle" type="String" />
+    <Field name="2018_Walk_or_jog" src="2018_Walk_or_jog" type="String" />
+    <Field name="2018_Ferry" src="2018_Ferry" type="String" />
+    <Field name="2018_Other" src="2018_Other" type="String" />
+    <Field name="2018_Total_stated" src="2018_Total_stated" type="String" />
+    <Field name="2023_Work_at_home" src="2023_Work_at_home" type="String" />
+    <Field name="2023_Drive_a_private_car_truck_or_van" src="2023_Drive_a_private_car_truck_or_van" type="String" />
+    <Field name="2023_Drive_a_company_car_truck_or_van" src="2023_Drive_a_company_car_truck_or_van" type="String" />
+    <Field name="2023_Passenger_in_a_car_truck_van_or_company_bus" src="2023_Passenger_in_a_car_truck_van_or_company_bus" type="String" />
+    <Field name="2023_Public_bus" src="2023_Public_bus" type="String" />
+    <Field name="2023_Train" src="2023_Train" type="String" />
+    <Field name="2023_Bicycle" src="2023_Bicycle" type="String" />
+    <Field name="2023_Walk_or_jog" src="2023_Walk_or_jog" type="String" />
+    <Field name="2023_Ferry" src="2023_Ferry" type="String" />
+    <Field name="2023_Other" src="2023_Other" type="String" />
+    <Field name="2023_Total_stated" src="2023_Total_stated" type="String" />
+  </OGRVRTLayer>
+</OGRVRTDataSource>
