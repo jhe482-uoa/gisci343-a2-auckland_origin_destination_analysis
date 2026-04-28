@@ -7,19 +7,19 @@ from ipyleaflet import Map, GeoData, LayersControl, basemaps, basemap_to_tiles, 
 
 
 # Inline sample data (replace with real data next week)
-sa2_data = pd.read_csv(r"data\statsnz-2023-census-main-means-of-travel-to-work-by-statistical-area-CSV\2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
+sa2_data = pd.read_csv(r"data/2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
 sa2_data.replace(-999,0,inplace=True)
 # sa2_data = sa2_data[(sa2_data["2023_Total_stated"] > 0) | (sa2_data["2018_Total_stated"] > 0)]
 
-path = r"data\statsnz-statistical-area-2-2023-generalised-SHP\statistical-area-2-2023-generalised.shp"
+path = r"data/statistical-area-2-2023-generalised-epsg4326.gpkg"
+
 sa2shape2023 = gpd.read_file(path)
 
-sa2shape2023 = sa2shape2023.to_crs(epsg=4326)
-
-sa2shape2023['SA22023_V1'] = sa2shape2023['SA22023_V1'].astype(int)
+# sa2shape2023 = sa2shape2023.to_crs(epsg=4326)
+# sa2shape2023['SA22023_V1'] = sa2shape2023['SA22023_V1'].astype(int)
 
 merged2023 = sa2shape2023.merge(sa2_data,"left", left_on="SA22023_V1", right_on="SA22023_V1_00_usual_residence_address")
-print(merged2023)
+# print(merged2023)
 center_x = sa2shape2023.geometry.centroid.x.mean()
 center_y = sa2shape2023.geometry.centroid.y.mean()
 
@@ -50,7 +50,6 @@ app_ui = ui.page_sidebar(
     )
 
 def server(input, output, session):
-
     @reactive.calc
     @reactive.event(input.update)
     def filter():
