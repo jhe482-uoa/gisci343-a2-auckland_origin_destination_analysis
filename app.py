@@ -3,26 +3,27 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from shinywidgets import output_widget, render_widget
 import geopandas as gpd
-from ipyleaflet import GeoJSON, Map, GeoData, LayersControl, ZoomControl, basemaps, basemap_to_tiles, display, CircleMarker, link
+from ipyleaflet import GeoJSON, Map, GeoData, LayersControl, ZoomControl, basemaps, basemap_to_tiles, display, CircleMarker, link, LegendControl
+
+GLOBAL_ZOOM = 9
+SA2_ZOOM = 13
 
 work_sa2_data = pd.read_csv(r"data/2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
 study_sa2_data = pd.read_csv(r"data/2023-census-main-means-of-travel-to-education-by-statistical.csv")
-path = r"data/statistical-area-2-2023-generalised-epsg4326.gpkg"
 
-sa2shape2023 = gpd.read_file(path)
+sa2shape2023 = gpd.read_file(r"data\aucklandsa2-2023.gpkg")
+sa2shape2023.to_crs(epsg=4326, inplace=True)
 
-
-# merged2023 = sa2shape2023.merge(work_sa2_data,"left", left_on="SA22023_V1", right_on="SA2_2023_V1_00_usual_residence_address").merge(study_sa2_data,"left", left_on="SA22023_V1", right_on="SA2_2023_V1_00_usual_residence_address")
 center_x = sa2shape2023.geometry.centroid.x.mean()
 center_y = sa2shape2023.geometry.centroid.y.mean()
 
 
 app_ui = ui.page_sidebar(
     ui.sidebar(
-        ui.h2("Title"),
+        ui.h2("OD Average Commute Distance Analysis"),
         ui.p("Author: Jeff He"),
         ui.input_radio_buttons("mode", "Mode", ["Origin", "Destination"], inline=True),
-        ui.input_select("selected_sa2", "Select SA2", sorted(list(sa2shape2023["SA22023__1"].unique()))),
+        ui.input_select("selected_sa2", "Select SA2", sorted(list(sa2shape2023["SA22023__1"].unique())),selected="Auckland-University"),
         ui.input_action_button("update", "Update"),
         ui.input_action_button("reset", "Reset")
         ),
@@ -39,13 +40,27 @@ app_ui = ui.page_sidebar(
             output_widget("study_map"),
             full_screen=True,
         ),
-        width=1/2, # This forces the 50/50 split
+        width=1/2,
     ),
 
-    ui.hr(), # Horizontal line separator
+    ui.hr(),
 
-    # 2. TABS SECTION (Switchable widgets below the maps)
     ui.navset_card_tab(
+        ui.nav_panel(
+            "Summary",
+            ui.card(
+                ui.output_text("work_summary"),
+                ui.output_text("study_summary")
+            ),
+            ui.card(
+                ui.card_header("Top 10 OD Chart"),
+                ui.output_plot("od_chart")
+            ),
+            ui.card(
+                ui.card_header("Commute Mode Analysis"),
+                ui.output_plot("commute_chart") 
+            )
+        ),
         ui.nav_panel(
             "Data Tables",
             ui.layout_column_wrap(
@@ -54,18 +69,7 @@ app_ui = ui.page_sidebar(
                 width=1/2
             )
         ),
-        ui.nav_panel(
-            "Visualizations",
-            ui.card(
-                ui.card_header("Commute Mode Analysis"),
-                ui.output_plot("commute_chart") # Example widget
-                
-            )
-        ),
-        ui.nav_panel(
-            "Summary Stats",
-            ui.output_text("summary_metrics")
-        )
+
     )
     )
 
@@ -86,32 +90,61 @@ def server(input, output, session):
         # print(work_filtered, study_filtered)
         return (work_filtered, study_filtered)
 
+    @render.plot
+    @reactive.event(input.update)
+    def od_chart():
+        work_filtered, study_filtered = filter()
+        id_col = "SA2_2023_V1_00_Origin_NAME" if input.mode() == "Destination" else "SA2_2023_V1_00_Destination_NAME"
 
-    @render.text
-    def summary():
-        df = filter()
-        if len(df) == 0:
-            return "No suburbs match the current filter."
-        return f"{len(df)} suburbs, mean income ${df['median_income'].mean():,.0f}."
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+
+        def plot_bar(ax, df, title):
+            df = df[[id_col, "commute_pct"]].sort_values("commute_pct", ascending=False)
+            top10 = df.head(10).sort_values("commute_pct", ascending=True)
+            if len(df) > 10:
+                other_pct = df.iloc[10:]["commute_pct"].sum()
+                other_row = pd.DataFrame({id_col: ["Other"], "commute_pct": [other_pct]})
+                plot_df = pd.concat([other_row, top10])  # Other always at bottom
+            else:
+                plot_df = top10
+            colors = ['#bab0ac' if name == "Other" else '#E31A1C' for name in plot_df[id_col]]
+            ax.barh(plot_df[id_col], plot_df["commute_pct"], color=colors)
+            ax.set_xlabel("% of total commuters")
+            ax.set_title(title)
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.1f}%"))
+
+        label = "Origins" if input.mode() == "Destination" else "Destinations"
+
+        plot_bar(ax1, work_filtered, f"\nWork {label} — {input.selected_sa2()}")
+        plot_bar(ax2, study_filtered, f"\nStudy {label} — {input.selected_sa2()}")
+
+        plt.tight_layout()
+        return fig
 
     @reactive.Effect
     @reactive.event(input.reset)
     def reset():
-
         work_map.widget.layers = work_map.widget.layers[:2]
-        
         work_map.widget.center = (center_y, center_x)
-        work_map.widget.zoom = 5
+        work_map.widget.zoom = GLOBAL_ZOOM
+        for control in study_map.widget.controls:
+            if isinstance(control, LegendControl):
+                study_map.widget.remove_control(control)
 
     @render.table
     @reactive.event(input.update)
     def work_tbl():
-        return filter()[0][["SA2_2023_V1_00_Origin_NAME", "SA2_2023_V1_00_Destination_NAME","work_2018_Total_stated", "work_2023_Total_stated"]]
-    
+        if input.mode() == "Destination":
+            return filter()[0].sort_values(by='work_2023_Total_stated', ascending=False)    # [["SA2_2023_V1_00_Origin_NAME", "work_2018_Total_stated", "work_2023_Total_stated"]]
+        else:
+            return filter()[0].sort_values(by='work_2023_Total_stated', ascending=False)    # [["SA2_2023_V1_00_Destination_NAME", "work_2018_Total_stated", "work_2023_Total_stated"]]
     @render.table
     @reactive.event(input.update)
     def study_tbl():
-        return filter()[1][["SA2_2023_V1_00_Origin_NAME", "SA2_2023_V1_00_Destination_NAME","study_2018_Total_stated", "study_2023_Total_stated"]]
+        if input.mode() == "Destination":
+            return filter()[1].sort_values(by='study_2023_Total_stated', ascending=False)   # [["SA2_2023_V1_00_Origin_NAME", "study_2018_Total_stated", "study_2023_Total_stated"]]
+        else:
+            return filter()[1].sort_values(by='study_2023_Total_stated', ascending=False)   # [["SA2_2023_V1_00_Destination_NAME", "study_2018_Total_stated", "study_2023_Total_stated"]]
 
     @render_widget
     def work_map():
@@ -123,7 +156,7 @@ def server(input, output, session):
             name='NZ Regions'
         )
 
-        m = Map(center=(center_y, center_x), zoom=5, layers=(new_tiles,))
+        m = Map(center=(center_y, center_x), zoom=GLOBAL_ZOOM, layers=(new_tiles,))
         m.add_layer(geo_data)
   
 
@@ -139,7 +172,7 @@ def server(input, output, session):
             name='NZ Regions'
         )
 
-        m = Map(center=(center_y, center_x), zoom=5, layers=(new_tiles,))
+        m = Map(center=(center_y, center_x), zoom=GLOBAL_ZOOM, layers=(new_tiles,))
         m.add_layer(geo_data)
         
 
@@ -163,41 +196,47 @@ def server(input, output, session):
         )
         return work_shapes, study_shapes    
 
-    @render.text
+    @reactive.calc
     @reactive.event(input.update)
     def summary_metrics():
         work_shapes, study_shapes = merged_shapes()
-        selected_name = input.selected_sa2()
+        selected_name = input.selected_sa2()  
         selected_centroid = sa2shape2023[sa2shape2023["SA22023__1"] == selected_name].geometry.centroid.iloc[0]
 
-        import math
-        def haversine(lat1, lon1, lat2, lon2):
-            R = 6371
-            dlat = math.radians(lat2 - lat1)
-            dlon = math.radians(lon2 - lon1)
-            a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-            return R * 2 * math.asin(math.sqrt(a))
-
         def calc_avg_distance(shapes, total_col):
-            shapes = shapes[shapes[total_col] > 0]
+            shapes = shapes[shapes[total_col] > 0].copy()
             if len(shapes) == 0:
                 return None
-            total_people = 0
-            total_distance = 0
-            for _, row in shapes.iterrows():
-                dist = haversine(selected_centroid.y, selected_centroid.x,
-                                 row.geometry.centroid.y, row.geometry.centroid.x)
-                total_distance += dist * row[total_col]
-                total_people += row[total_col]
-            return total_distance / total_people if total_people > 0 else None
+            
+            # Reproject to NZTM (meters) for accurate distance calculation
+            shapes_proj = shapes.to_crs(epsg=2193)
+            selected_proj = sa2shape2023[sa2shape2023["SA22023__1"] == selected_name].to_crs(epsg=2193)
+            selected_centroid = selected_proj.geometry.centroid.iloc[0]
 
-        work_avg = calc_avg_distance(work_shapes, "work_2023_Total_stated")
-        study_avg = calc_avg_distance(study_shapes, "study_2023_Total_stated")
+            distances_m = shapes_proj.geometry.centroid.distance(selected_centroid)
+            distances_km = distances_m / 1000
 
-        work_str = f"{work_avg:.1f} km" if work_avg is not None else "No data"
-        study_str = f"{study_avg:.1f} km" if study_avg is not None else "No data"
+            total_people = shapes[total_col].sum()
+            weighted_distance = (distances_km * shapes[total_col].values).sum()
 
-        return f"Average commute distance to work: {work_str}\nAverage distance to study: {study_str}"
+            return weighted_distance / total_people if total_people > 0 else None
+
+        work_2023 = calc_avg_distance(work_shapes, "work_2023_Total_stated")
+        work_2018 = calc_avg_distance(work_shapes, "work_2018_Total_stated")
+        study_2023 = calc_avg_distance(study_shapes, "study_2023_Total_stated")
+        study_2018 = calc_avg_distance(study_shapes, "study_2018_Total_stated")
+
+        return [f"Average work commute: {work_2023:.1f} km (2023) {work_2018:.1f} km (2018)", f"Average study commute: {study_2023:.1f} km (2023) {study_2018:.1f} km (2018)"]
+
+    @render.text
+    @reactive.event(input.update)
+    def work_summary():
+        return summary_metrics()[0]
+
+    @render.text
+    @reactive.event(input.update)
+    def study_summary():
+        return summary_metrics()[1]
 
     @reactive.Effect
     @reactive.event(input.update)
@@ -208,12 +247,30 @@ def server(input, output, session):
         
         work_map_shapes, study_map_shapes = merged_shapes()
         
+        COLORS = [ '#67000D','#EF3B2C', '#FC9272','#FEE0D2', '#FFFFFF',
+        ]
+
         def determine_color(pct):
-            if pct > 20: return '#800026' 
-            if pct > 10: return '#BD055026'
-            if pct > 5:  return '#E31A1C'
-            if pct > 2:  return '#FC4E2A'
-            return '#FFEDA0'
+            if pct > 50: return COLORS[0]
+            if pct > 25: return COLORS[1]
+            if pct > 15: return COLORS[2]
+            if pct > 5:  return COLORS[3]
+            return COLORS[4]
+
+        if not any(isinstance(control, LegendControl) for control in study_map.widget.controls):
+            legend = LegendControl(
+                legend={
+                    ">50%":  COLORS[0],
+                    "25-50%": COLORS[1],
+                    "15-25%": COLORS[2],
+                    "5-15%":  COLORS[3],
+                    "<5%":    COLORS[4],
+                },
+                title="Commuter %",
+                position="bottomright"
+            )
+            study_map.widget.add_control(legend)
+
 
         work_map_shapes['fill_color'] = work_map_shapes['commute_pct'].apply(determine_color)
         study_map_shapes['fill_color'] = study_map_shapes['commute_pct'].apply(determine_color)
@@ -256,21 +313,90 @@ def server(input, output, session):
         work_map.widget.add_layer(new_work_layer)
         work_map.widget.add_layer(marker)
         work_map.widget.center = (lat, lon)
-        work_map.widget.zoom = 8
+        work_map.widget.zoom = SA2_ZOOM
 
         study_map.widget.add_layer(new_study_layer)
         study_map.widget.add_layer(marker)
         # study_map.widget.center = (lat, lon)
-        # study_map.widget.zoom = 8
+        # study_map.widget.zoom = SA2_ZOOM
 
-    # @render.plot
-    # def chart():
-    #     df = filter()
-    #     fig, ax = plt.subplots(figsize=(7, 4))
-    #     ax.barh(df["suburb"], df["median_income"], color="steelblue")
-    #     ax.set_xlabel("Median income (NZ$)")
-    #     ax.set_title("Median income by suburb")
-    #     plt.tight_layout()
-    #     return fig
+    @render.plot
+    @reactive.event(input.update)
+    def commute_chart():
+        work_filtered, study_filtered = filter()
+
+        work_mode_cols = {
+            'Work at home': 'work_2023_Work_at_home',
+            'Private car': 'work_2023_Drive_a_private_car_truck_or_van',
+            'Company car': 'work_2023_Drive_a_company_car_truck_or_van',
+            'Passenger': 'work_2023_Passenger_in_a_car_truck_van_or_company_bus',
+            'Public bus': 'work_2023_Public_bus',
+            'Train': 'work_2023_Train',
+            'Bicycle': 'work_2023_Bicycle',
+            'Walk/jog': 'work_2023_Walk_or_jog',
+            'Ferry': 'work_2023_Ferry',
+            'Other': 'work_2023_Other',
+        }
+        study_mode_cols = {
+            'Study at home': 'study_2023_Study_at_home',
+            'Drive': 'study_2023_Drive_a_car_truck_or_van',
+            'Passenger': 'study_2023_Passenger_in_a_car_truck_or_van',
+            'Bicycle': 'study_2023_Bicycle',
+            'Walk/jog': 'study_2023_Walk_or_jog',
+            'School bus': 'study_2023_School_bus',
+            'Public bus': 'study_2023_Public_bus',
+            'Train': 'study_2023_Train',
+            'Ferry': 'study_2023_Ferry',
+            'Other': 'study_2023_Other',
+        }
+
+        def get_totals(filtered_df, mode_cols):
+            totals = {label: filtered_df[col].sum() for label, col in mode_cols.items()}
+            # Drop zero values so they don't clutter the pie
+            return {k: v for k, v in totals.items() if v > 0}
+
+        COLORS = {
+            'Work at home': '#4e79a7',
+            'Study at home': '#4e79a7',
+            'Company car':   '#f28e2b',
+            'Private car':   '#e15759',
+            'Drive':         '#e15759', # Equivalent of Private car from work data
+            'Passenger':     '#ff9da7',
+            'Bicycle':       '#edc948',
+            'Walk/jog':      '#b07aa1',
+            'School bus':    '#f28e2b',
+            'Public bus':    '#76b7b2',
+            'Train':         '#59a14f',
+            'Ferry':         '#9c755f',
+            'Other':         '#bab0ac',
+        }
+
+        work_totals = get_totals(work_filtered, work_mode_cols)
+        study_totals = get_totals(study_filtered, study_mode_cols)
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+
+        ax1.pie(
+            work_totals.values(),
+            labels=work_totals.keys(),
+            colors=[COLORS[k] for k in work_totals.keys()],
+            autopct='%1.1f%%',
+            startangle=90
+        )
+
+
+        ax1.set_title(f"\nWork Commute Breakdown {input.selected_sa2()} ({input.mode()})", fontsize=12)
+
+        ax2.pie(
+            study_totals.values(),
+            labels=study_totals.keys(),
+            colors=[COLORS[k] for k in study_totals.keys()],
+            autopct='%1.1f%%',
+            startangle=90
+        )        
+        ax2.set_title(f"\nStudy Commute Breakdown {input.selected_sa2()} ({input.mode()})", fontsize=12)
+
+        plt.tight_layout()
+        return fig
 
 app = App(app_ui, server)
