@@ -11,7 +11,7 @@ SA2_ZOOM = 13
 work_sa2_data = pd.read_csv(r"data/2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
 study_sa2_data = pd.read_csv(r"data/2023-census-main-means-of-travel-to-education-by-statistical.csv")
 
-sa2shape2023 = gpd.read_file(r"data\aucklandsa2-2023.gpkg")
+sa2shape2023 = gpd.read_file(r"data/aucklandsa2-2023.gpkg")
 sa2shape2023.to_crs(epsg=4326, inplace=True)
 
 center_x = sa2shape2023.geometry.centroid.x.mean()
@@ -20,7 +20,10 @@ center_y = sa2shape2023.geometry.centroid.y.mean()
 
 app_ui = ui.page_sidebar(
     ui.sidebar(
-        ui.h2("OD Average Commute Distance Analysis"),
+        ui.tags.style("""
+        .shiny-table th { text-align: left !important; }
+        """),
+        ui.h2("Weighted Average Travel Distance Analysis"),
         ui.p("Author: Jeff He"),
         ui.input_radio_buttons("mode", "Mode", ["Origin", "Destination"], inline=True),
         ui.input_select("selected_sa2", "Select SA2", sorted(list(sa2shape2023["SA22023__1"].unique())),selected="Auckland-University"),
@@ -49,8 +52,8 @@ app_ui = ui.page_sidebar(
         ui.nav_panel(
             "Summary",
             ui.card(
-                ui.output_text("work_summary"),
-                ui.output_text("study_summary")
+                ui.card_header("Summary Table"),
+                ui.output_table("summary_metrics"),
             ),
             ui.card(
                 ui.card_header("Top 10 OD Chart"),
@@ -134,17 +137,12 @@ def server(input, output, session):
     @render.table
     @reactive.event(input.update)
     def work_tbl():
-        if input.mode() == "Destination":
-            return filter()[0].sort_values(by='work_2023_Total_stated', ascending=False)    # [["SA2_2023_V1_00_Origin_NAME", "work_2018_Total_stated", "work_2023_Total_stated"]]
-        else:
-            return filter()[0].sort_values(by='work_2023_Total_stated', ascending=False)    # [["SA2_2023_V1_00_Destination_NAME", "work_2018_Total_stated", "work_2023_Total_stated"]]
+        return filter()[0].sort_values(by='work_2023_Total_stated', ascending=False)    # [["SA2_2023_V1_00_Origin_NAME", "work_2018_Total_stated", "work_2023_Total_stated"]] # [["SA2_2023_V1_00_Destination_NAME", "work_2018_Total_stated", "work_2023_Total_stated"]]
+
     @render.table
     @reactive.event(input.update)
     def study_tbl():
-        if input.mode() == "Destination":
-            return filter()[1].sort_values(by='study_2023_Total_stated', ascending=False)   # [["SA2_2023_V1_00_Origin_NAME", "study_2018_Total_stated", "study_2023_Total_stated"]]
-        else:
-            return filter()[1].sort_values(by='study_2023_Total_stated', ascending=False)   # [["SA2_2023_V1_00_Destination_NAME", "study_2018_Total_stated", "study_2023_Total_stated"]]
+        return filter()[1].sort_values(by='study_2023_Total_stated', ascending=False)   # [["SA2_2023_V1_00_Origin_NAME", "study_2018_Total_stated", "study_2023_Total_stated"]] # [["SA2_2023_V1_00_Destination_NAME", "study_2018_Total_stated", "study_2023_Total_stated"]]
 
     @render_widget
     def work_map():
@@ -196,47 +194,43 @@ def server(input, output, session):
         )
         return work_shapes, study_shapes    
 
-    @reactive.calc
+    @render.table
     @reactive.event(input.update)
     def summary_metrics():
         work_shapes, study_shapes = merged_shapes()
-        selected_name = input.selected_sa2()  
-        selected_centroid = sa2shape2023[sa2shape2023["SA22023__1"] == selected_name].geometry.centroid.iloc[0]
+        selected_name = input.selected_sa2()
 
         def calc_avg_distance(shapes, total_col):
-            shapes = shapes[shapes[total_col] > 0].copy()
+            shapes = shapes[shapes[total_col] > 0].copy().reset_index(drop=True)
             if len(shapes) == 0:
                 return None
-            
-            # Reproject to NZTM (meters) for accurate distance calculation
             shapes_proj = shapes.to_crs(epsg=2193)
             selected_proj = sa2shape2023[sa2shape2023["SA22023__1"] == selected_name].to_crs(epsg=2193)
             selected_centroid = selected_proj.geometry.centroid.iloc[0]
-
-            distances_m = shapes_proj.geometry.centroid.distance(selected_centroid)
-            distances_km = distances_m / 1000
-
+            distances_km = shapes_proj.geometry.centroid.distance(selected_centroid) / 1000
             total_people = shapes[total_col].sum()
-            weighted_distance = (distances_km * shapes[total_col].values).sum()
+            return (distances_km * shapes[total_col]).sum() / total_people if total_people > 0 else None
 
-            return weighted_distance / total_people if total_people > 0 else None
-
-        work_2023 = calc_avg_distance(work_shapes, "work_2023_Total_stated")
-        work_2018 = calc_avg_distance(work_shapes, "work_2018_Total_stated")
-        study_2023 = calc_avg_distance(study_shapes, "study_2023_Total_stated")
-        study_2018 = calc_avg_distance(study_shapes, "study_2018_Total_stated")
-
-        return [f"Average work commute: {work_2023:.1f} km (2023) {work_2018:.1f} km (2018)", f"Average study commute: {study_2023:.1f} km (2023) {study_2018:.1f} km (2018)"]
-
-    @render.text
-    @reactive.event(input.update)
-    def work_summary():
-        return summary_metrics()[0]
-
-    @render.text
-    @reactive.event(input.update)
-    def study_summary():
-        return summary_metrics()[1]
+        return pd.DataFrame({
+            "Metric": [
+                "Work Weighted Avg commute distance (km)",
+                "Total workers",
+                "Study Weighted Avg commute distance (km)",
+                "Total students"
+            ],
+            "2023": [
+                f"{calc_avg_distance(work_shapes, 'work_2023_Total_stated'):.1f}",
+                f"{work_shapes['work_2023_Total_stated'].sum():,.0f}",
+                f"{calc_avg_distance(study_shapes, 'study_2023_Total_stated'):.1f}",
+                f"{study_shapes['study_2023_Total_stated'].sum():,.0f}",
+            ],
+            "2018": [
+                f"{calc_avg_distance(work_shapes, 'work_2018_Total_stated'):.1f}",
+                f"{work_shapes['work_2018_Total_stated'].sum():,.0f}",
+                f"{calc_avg_distance(study_shapes, 'study_2018_Total_stated'):.1f}",
+                f"{study_shapes['study_2018_Total_stated'].sum():,.0f}",
+            ]
+        })
 
     @reactive.Effect
     @reactive.event(input.update)
