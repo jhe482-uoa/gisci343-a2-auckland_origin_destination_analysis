@@ -1,3 +1,4 @@
+from pathlib import Path
 from shiny import App, ui, render, reactive
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,10 +10,13 @@ from ipywidgets import HTML
 GLOBAL_ZOOM = 9
 SA2_ZOOM = 13
 
-work_sa2_data = pd.read_csv(r"data/2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
-study_sa2_data = pd.read_csv(r"data/2023-census-main-means-of-travel-to-education-by-statistical.csv")
+_data_dir = Path(__file__).parent / "data"
 
-sa2shape2023 = gpd.read_file(r"data/aucklandsa2-2023.gpkg")
+work_sa2_data = pd.read_csv(_data_dir / "2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
+study_sa2_data = pd.read_csv(_data_dir / "2023-census-main-means-of-travel-to-education-by-statistical.csv")
+
+sa2shape2023 = gpd.read_file(_data_dir / "aucklandsa2-2023.gpkg")
+
 sa2shape2023.to_crs(epsg=4326, inplace=True)
 
 center_x = sa2shape2023.geometry.centroid.x.mean()
