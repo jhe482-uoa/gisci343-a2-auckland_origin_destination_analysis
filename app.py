@@ -3,7 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from shinywidgets import output_widget, render_widget
 import geopandas as gpd
-from ipyleaflet import GeoJSON, Map, GeoData, LayersControl, ZoomControl, basemaps, basemap_to_tiles, display, CircleMarker, link, LegendControl
+from ipyleaflet import GeoJSON, Map, GeoData, LayersControl, WidgetControl, ZoomControl, basemaps, basemap_to_tiles, display, CircleMarker, link, LegendControl
+from ipywidgets import HTML
 
 GLOBAL_ZOOM = 9
 SA2_ZOOM = 13
@@ -192,7 +193,7 @@ def server(input, output, session):
             study_filtered[[id_col, "commute_pct", "study_2023_Total_stated", "study_2018_Total_stated"]],
             left_on="SA22023__1", right_on=id_col
         )
-        return work_shapes, study_shapes    
+        return work_shapes[work_shapes["work_2023_Total_stated"] != 0], study_shapes[study_shapes["study_2023_Total_stated"] != 0]
 
     @render.table
     @reactive.event(input.update)
@@ -245,20 +246,20 @@ def server(input, output, session):
         ]
 
         def determine_color(pct):
-            if pct > 50: return COLORS[0]
-            if pct > 25: return COLORS[1]
-            if pct > 15: return COLORS[2]
-            if pct > 5:  return COLORS[3]
+            if pct > 25: return COLORS[0]
+            if pct > 10: return COLORS[1]
+            if pct > 5: return COLORS[2]
+            if pct > 1:  return COLORS[3]
             return COLORS[4]
 
         if not any(isinstance(control, LegendControl) for control in study_map.widget.controls):
             legend = LegendControl(
                 legend={
-                    ">50%":  COLORS[0],
-                    "25-50%": COLORS[1],
-                    "15-25%": COLORS[2],
-                    "5-15%":  COLORS[3],
-                    "<5%":    COLORS[4],
+                    ">25%":  COLORS[0],
+                    "10-25%": COLORS[1],
+                    "5-10%": COLORS[2],
+                    "1-5%":  COLORS[3],
+                    "<1%":    COLORS[4],
                 },
                 title="Commuter %",
                 position="bottomright"
@@ -269,28 +270,31 @@ def server(input, output, session):
         work_map_shapes['fill_color'] = work_map_shapes['commute_pct'].apply(determine_color)
         study_map_shapes['fill_color'] = study_map_shapes['commute_pct'].apply(determine_color)
 
+        work_html  = HTML("<i>Hover over a region</i>")
+        study_html = HTML("<i>Hover over a region</i>")
 
-        new_work_layer = GeoJSON(
-            data=work_map_shapes.__geo_interface__,
-            hover_style={'fillColor': 'cyan', 'fillOpacity': 0.8},
-            style_callback=lambda feature: {
-                'fillColor': feature['properties']['fill_color'],
-                'color': '#666666',
-                'weight': 1,
-                'fillOpacity': 0.7
-            },
-        )
-        new_study_layer = GeoJSON(
-            data=study_map_shapes.__geo_interface__,
-            hover_style={'fillColor': 'cyan', 'fillOpacity': 0.8},
-            style_callback=lambda feature: {
-                'fillColor': feature['properties']['fill_color'],
-                'color': '#666666',
-                'weight': 1,
-                'fillOpacity': 0.7
-            },
-        )
-        
+        for m, h in [(work_map.widget, work_html), (study_map.widget, study_html)]:
+            for c in [c for c in m.controls if isinstance(c, WidgetControl)]:
+                m.remove_control(c)
+            m.add_control(WidgetControl(widget=h, position="topright"))
+
+        def make_layer(shapes, count_col, tooltip_html):
+            def on_hover(feature, **kw):
+                type = "workers" if count_col.split("_")[0] == "work" else "students"
+                p = feature["properties"]
+                tooltip_html.value = f"<b>{p['SA22023__1']}</b>: {int(p[count_col]):,} {type} ({p['commute_pct']:.2f}%)"
+            layer = GeoJSON(
+                data=shapes.__geo_interface__,
+                hover_style={"fillColor": "cyan", "fillOpacity": 0.8},
+                style_callback=lambda f: {"fillColor": f["properties"]["fill_color"],
+                                        "color": "#666", "weight": 1, "fillOpacity": 0.7},
+            )
+            layer.on_hover(on_hover)
+            return layer
+
+        new_work_layer  = make_layer(work_map_shapes,  "work_2023_Total_stated",  work_html)
+        new_study_layer = make_layer(study_map_shapes, "study_2023_Total_stated", study_html)
+
 
         marker = CircleMarker(
             location=(lat, lon), 
@@ -311,8 +315,7 @@ def server(input, output, session):
 
         study_map.widget.add_layer(new_study_layer)
         study_map.widget.add_layer(marker)
-        # study_map.widget.center = (lat, lon)
-        # study_map.widget.zoom = SA2_ZOOM
+
 
     @render.plot
     @reactive.event(input.update)
