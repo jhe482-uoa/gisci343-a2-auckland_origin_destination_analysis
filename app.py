@@ -38,10 +38,67 @@ LEGEND_ITEMS = [
     ("<1%",    COLORS[4]),
 ]
 
+# Column name maps per year
+WORK_COLS = {
+    "2023": {
+        "total":    "work_2023_Total_stated",
+        "home":     "work_2023_Work_at_home",
+        "priv_car": "work_2023_Drive_a_private_car_truck_or_van",
+        "comp_car": "work_2023_Drive_a_company_car_truck_or_van",
+        "passenger":"work_2023_Passenger_in_a_car_truck_van_or_company_bus",
+        "bus":      "work_2023_Public_bus",
+        "train":    "work_2023_Train",
+        "bicycle":  "work_2023_Bicycle",
+        "walk":     "work_2023_Walk_or_jog",
+        "ferry":    "work_2023_Ferry",
+        "other":    "work_2023_Other",
+    },
+    "2018": {
+        "total":    "work_2018_Total_stated",
+        "home":     "work_2018_Work_at_home",
+        "priv_car": "work_2018_Drive_a_private_car_truck_or_van",
+        "comp_car": "work_2018_Drive_a_company_car_truck_or_van",
+        "passenger":"work_2018_Passenger_in_a_car_truck_van_or_company_bus",
+        "bus":      "work_2018_Public_bus",
+        "train":    "work_2018_Train",
+        "bicycle":  "work_2018_Bicycle",
+        "walk":     "work_2018_Walk_or_jog",
+        "ferry":    "work_2018_Ferry",
+        "other":    "work_2018_Other",
+    },
+}
+STUDY_COLS = {
+    "2023": {
+        "total":    "study_2023_Total_stated",
+        "home":     "study_2023_Study_at_home",
+        "drive":    "study_2023_Drive_a_car_truck_or_van",
+        "passenger":"study_2023_Passenger_in_a_car_truck_or_van",
+        "bicycle":  "study_2023_Bicycle",
+        "walk":     "study_2023_Walk_or_jog",
+        "school_bus":"study_2023_School_bus",
+        "bus":      "study_2023_Public_bus",
+        "train":    "study_2023_Train",
+        "ferry":    "study_2023_Ferry",
+        "other":    "study_2023_Other",
+    },
+    "2018": {
+        "total":    "study_2018_Total_stated",
+        "home":     "study_2018_Study_at_home",
+        "drive":    "study_2018_Drive_a_car_truck_or_van",
+        "passenger":"study_2018_Passenger_in_a_car_truck_or_van",
+        "bicycle":  "study_2018_Bicycle",
+        "walk":     "study_2018_Walk_or_jog",
+        "school_bus":"study_2018_School_bus",
+        "bus":      "study_2018_Public_bus",
+        "train":    "study_2018_Train",
+        "ferry":    "study_2018_Ferry",
+        "other":    "study_2018_Other",
+    },
+}
+
 
 def _build_legend():
     shapes, annotations = [], []
-
     shapes.append(dict(
         type="rect", xref="paper", yref="paper",
         x0=0.0, x1=0.12, y0=0.64, y1=1.04,
@@ -49,15 +106,12 @@ def _build_legend():
         line=dict(color="grey", width=1),
         layer="above",
     ))
-
-    # Title
     annotations.append(dict(
         xref="paper", yref="paper",
         x=0.01, y=1.01,
         text="<b>Commuter %</b>",
         showarrow=False, font=dict(size=12), xanchor="left",
     ))
-
     for i, (label_text, color) in enumerate(LEGEND_ITEMS):
         y_top = 0.95 - i * 0.065
         y_bot = y_top - 0.045
@@ -73,7 +127,6 @@ def _build_legend():
             text=label_text, showarrow=False,
             font=dict(size=11), xanchor="left", yanchor="middle",
         ))
-
     return shapes, annotations
 
 
@@ -82,6 +135,7 @@ app_ui = ui.page_sidebar(
         ui.tags.style(".shiny-table th { text-align: left !important; }"),
         ui.h2("Weighted Average Travel Distance Analysis"),
         ui.p("Author: Jeff He"),
+        ui.input_radio_buttons("year", "Census Year", ["2023", "2018"], inline=True),
         ui.input_radio_buttons("mode", "Mode", ["Origin", "Destination"], inline=True),
         ui.input_select(
             "selected_sa2", "Select SA2",
@@ -95,17 +149,17 @@ app_ui = ui.page_sidebar(
     ),
     ui.h3("Spatial Distribution"),
     ui.layout_column_wrap(
-        ui.card(ui.card_header("Workplace Destinations"),  output_widget("work_map"),  full_screen=True),
-        ui.card(ui.card_header("Education Destinations"),  output_widget("study_map"), full_screen=True),
+        ui.card(ui.card_header("Work Map"),  output_widget("work_map"),  full_screen=True),
+        ui.card(ui.card_header("Study Map"),  output_widget("study_map"), full_screen=True),
         width=1/2,
     ),
     ui.hr(),
     ui.navset_card_tab(
         ui.nav_panel(
             "Summary",
-            ui.card(ui.card_header("Summary Table"),         ui.output_table("summary_metrics")),
-            ui.card(ui.card_header("Top 10 OD Chart"),       ui.output_plot("od_chart")),
-            ui.card(ui.card_header("Commute Mode Analysis"),  ui.output_plot("commute_chart")),
+            ui.card(ui.card_header("Summary Table"),          ui.output_table("summary_metrics")),
+            ui.card(ui.card_header("Top 10 OD Chart"),        ui.output_plot("od_chart")),
+            ui.card(ui.card_header("Commute Mode Analysis"),   ui.output_plot("commute_chart")),
         ),
         ui.nav_panel(
             "Data Tables",
@@ -120,13 +174,12 @@ app_ui = ui.page_sidebar(
 
 
 def server(input, output, session):
+
     def _make_map_widget():
         legend_shapes, legend_annotations = _build_legend()
         fig = go.FigureWidget()
-
         fig.add_trace(go.Choroplethmapbox(
-            geojson=BASE_GEOJSON,
-            locations=SA2_NAMES,
+            geojson=BASE_GEOJSON, locations=SA2_NAMES,
             z=[0] * len(SA2_NAMES),
             featureidkey="properties.SA22023__1",
             colorscale=[[0, "rgba(180,180,180,0.3)"], [1, "rgba(180,180,180,0.3)"]],
@@ -145,13 +198,8 @@ def server(input, output, session):
             marker=dict(size=12, color="yellow"),
             showlegend=False,
         ))
-
         fig.update_layout(
-            mapbox=dict(
-                style="carto-positron",
-                center=dict(lat=center_y, lon=center_x),
-                zoom=GLOBAL_ZOOM,
-            ),
+            mapbox=dict(style="carto-positron", center=dict(lat=center_y, lon=center_x), zoom=GLOBAL_ZOOM),
             margin=dict(l=0, r=0, t=0, b=0),
             shapes=legend_shapes,
             annotations=legend_annotations,
@@ -173,7 +221,10 @@ def server(input, output, session):
     @reactive.event(input.update)
     def filter_data():
         selected = input.selected_sa2()
+        year     = input.year()
         id_col   = "SA2_2023_V1_00_Destination_NAME" if input.mode() == "Destination" else "SA2_2023_V1_00_Origin_NAME"
+        w_total  = WORK_COLS[year]["total"]
+        s_total  = STUDY_COLS[year]["total"]
 
         def _filter(df, total_col):
             f     = df[df[id_col] == selected].copy()
@@ -181,48 +232,52 @@ def server(input, output, session):
             f["commute_pct"] = (f[total_col] / total * 100) if total > 0 else 0
             return f
 
-        return _filter(work_sa2_data, "work_2023_Total_stated"), _filter(study_sa2_data, "study_2023_Total_stated")
+        return _filter(work_sa2_data, w_total), _filter(study_sa2_data, s_total)
 
     @reactive.calc
     @reactive.event(input.update)
     def merged_shapes():
         work_filtered, study_filtered = filter_data()
+        year   = input.year()
         id_col = "SA2_2023_V1_00_Origin_NAME" if input.mode() == "Destination" else "SA2_2023_V1_00_Destination_NAME"
 
-        def _merge(filtered, total_col, old_col):
+        # For the selected year we show that year's count; the "other" year is for tooltip comparison
+        w_total   = WORK_COLS[year]["total"]
+        s_total   = STUDY_COLS[year]["total"]
+        other     = "2018" if year == "2023" else "2023"
+        w_other   = WORK_COLS[other]["total"]
+        s_other   = STUDY_COLS[other]["total"]
+
+        def _merge(filtered, total_col, other_col):
             merged = sa2shape2023.merge(
-                filtered[[id_col, "commute_pct", total_col, old_col]],
+                filtered[[id_col, "commute_pct", total_col, other_col]],
                 left_on="SA22023__1", right_on=id_col,
             )
             merged = merged[merged[total_col] != 0].copy()
-
-            top_x = input.top_x()
+            top_x  = input.top_x()
             if top_x and top_x > 0:
                 ascending = input.top_x_order() == "Least"
-                merged = (
-                    merged.sort_values(total_col, ascending=ascending)
-                          .head(top_x)
-                )
+                merged = merged.sort_values(total_col, ascending=ascending).head(top_x)
             return merged
 
         return (
-            _merge(work_filtered,  "work_2023_Total_stated",  "work_2018_Total_stated"),
-            _merge(study_filtered, "study_2023_Total_stated", "study_2018_Total_stated"),
+            _merge(work_filtered,  w_total, w_other),
+            _merge(study_filtered, s_total, s_other),
         )
 
-    def _update_widget(widget, shapes, count_col, old_col, lat, lon, selected_name):
+    def _update_widget(widget, shapes, count_col, other_col, lat, lon, selected_name, year):
         label = "Workers" if "work" in count_col else "Students"
-        geojson = json.loads(shapes.to_json())
+        other = "2018" if year == "2023" else "2023"
         with widget.batch_update():
-            t              = widget.data[1]
-            t.geojson      = geojson
-            t.locations    = shapes["SA22023__1"]
-            t.z            = shapes["commute_pct"]
-            t.customdata   = shapes[[count_col, old_col, "commute_pct"]].values
+            t               = widget.data[1]
+            t.geojson       = json.loads(shapes.to_json())
+            t.locations     = shapes["SA22023__1"]
+            t.z             = shapes["commute_pct"]
+            t.customdata    = shapes[[count_col, other_col, "commute_pct"]].values
             t.hovertemplate = (
                 "<b>%{location}</b><br>"
-                f"{label} 2023: %{{customdata[0]:,.0f}}<br>"
-                f"{label} 2018: %{{customdata[1]:,.0f}}<br>"
+                f"{label} {year}: %{{customdata[0]:,.0f}}<br>"
+                f"{label} {other}: %{{customdata[1]:,.0f}}<br>"
                 "Share: %{customdata[2]:.1f}%"
                 "<extra></extra>"
             )
@@ -237,43 +292,52 @@ def server(input, output, session):
     @reactive.event(input.update)
     def _update_maps():
         work_shapes, study_shapes = merged_shapes()
+        year          = input.year()
+        other         = "2018" if year == "2023" else "2023"
         selected_name = input.selected_sa2()
         row = sa2shape2023[sa2shape2023["SA22023__1"] == selected_name]
         lat = float(row.geometry.centroid.y.values[0])
         lon = float(row.geometry.centroid.x.values[0])
 
-        _update_widget(work_widget,  work_shapes,  "work_2023_Total_stated",  "work_2018_Total_stated",  lat, lon, selected_name)
-        _update_widget(study_widget, study_shapes, "study_2023_Total_stated", "study_2018_Total_stated", lat, lon, selected_name)
+        _update_widget(work_widget,  work_shapes,  WORK_COLS[year]["total"],  WORK_COLS[other]["total"],  lat, lon, selected_name, year)
+        _update_widget(study_widget, study_shapes, STUDY_COLS[year]["total"], STUDY_COLS[other]["total"], lat, lon, selected_name, year)
 
     @reactive.effect
     @reactive.event(input.reset)
     def _reset_maps():
         for widget in (work_widget, study_widget):
             with widget.batch_update():
-                widget.data[1].locations        = []
-                widget.data[1].z                = []
-                widget.data[2].lat              = []
-                widget.data[2].lon              = []
-                widget.layout.mapbox.center     = dict(lat=center_y, lon=center_x)
-                widget.layout.mapbox.zoom       = GLOBAL_ZOOM
-        ui.update_numeric("update_numeric", value="")
+                widget.data[1].locations    = []
+                widget.data[1].z            = []
+                widget.data[2].lat          = []
+                widget.data[2].lon          = []
+                widget.layout.mapbox.center = dict(lat=center_y, lon=center_x)
+                widget.layout.mapbox.zoom   = GLOBAL_ZOOM
 
     @render.table
     @reactive.event(input.update)
     def work_tbl():
-        return filter_data()[0].sort_values(by="work_2023_Total_stated", ascending=False)
+        year = input.year()
+        return filter_data()[0].sort_values(by=WORK_COLS[year]["total"], ascending=False)
 
     @render.table
     @reactive.event(input.update)
     def study_tbl():
-        return filter_data()[1].sort_values(by="study_2023_Total_stated", ascending=False)
+        year = input.year()
+        return filter_data()[1].sort_values(by=STUDY_COLS[year]["total"], ascending=False)
 
     @render.table
     @reactive.event(input.update)
     def summary_metrics():
         work_shapes, study_shapes = merged_shapes()
         selected_name = input.selected_sa2()
- 
+        year          = input.year()
+        other         = "2018" if year == "2023" else "2023"
+        w_total       = WORK_COLS[year]["total"]
+        s_total       = STUDY_COLS[year]["total"]
+        w_other       = WORK_COLS[other]["total"]
+        s_other       = STUDY_COLS[other]["total"]
+
         def calc_avg_distance(shapes, total_col):
             shapes = shapes[shapes[total_col] > 0].copy().reset_index(drop=True)
             if len(shapes) == 0:
@@ -284,12 +348,11 @@ def server(input, output, session):
             total_people  = shapes[total_col].sum()
             return (distances_km * shapes[total_col]).sum() / total_people if total_people > 0 else None
 
- 
-        top_x     = input.top_x()
-        top_x_str = f" (top {top_x} {input.top_x_order().lower()})" if top_x else ""
         def fmt_dist(val):
             return f"{val:.1f}" if val is not None else "N/A"
 
+        top_x     = input.top_x()
+        top_x_str = f" (top {top_x} {input.top_x_order().lower()})" if top_x else ""
 
         return pd.DataFrame({
             "Metric": [
@@ -298,27 +361,26 @@ def server(input, output, session):
                 f"Study Weighted Avg commute distance (km){top_x_str}",
                 "Total students",
             ],
-            "2023": [
-                fmt_dist(calc_avg_distance(work_shapes,  'work_2023_Total_stated')),
-                f"{work_shapes['work_2023_Total_stated'].sum():,.0f}",
-                fmt_dist(calc_avg_distance(study_shapes, 'study_2023_Total_stated')),
-                f"{study_shapes['study_2023_Total_stated'].sum():,.0f}",
+            year: [
+                fmt_dist(calc_avg_distance(work_shapes,  w_total)),
+                f"{work_shapes[w_total].sum():,.0f}",
+                fmt_dist(calc_avg_distance(study_shapes, s_total)),
+                f"{study_shapes[s_total].sum():,.0f}",
             ],
-            "2018": [
-                fmt_dist(calc_avg_distance(work_shapes,  'work_2018_Total_stated')),
-                f"{work_shapes['work_2018_Total_stated'].sum():,.0f}",
-                fmt_dist(calc_avg_distance(study_shapes, 'study_2018_Total_stated')),
-                f"{study_shapes['study_2018_Total_stated'].sum():,.0f}",
+            other: [
+                fmt_dist(calc_avg_distance(work_shapes,  w_other)),
+                f"{work_shapes[w_other].sum():,.0f}",
+                fmt_dist(calc_avg_distance(study_shapes, s_other)),
+                f"{study_shapes[s_other].sum():,.0f}",
             ],
         })
-
-
 
     @render.plot
     @reactive.event(input.update)
     def od_chart():
         work_filtered, study_filtered = filter_data()
         id_col = "SA2_2023_V1_00_Origin_NAME" if input.mode() == "Destination" else "SA2_2023_V1_00_Destination_NAME"
+        year   = input.year()
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
 
         def plot_bar(ax, df, title):
@@ -336,8 +398,8 @@ def server(input, output, session):
             ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.1f}%"))
 
         label = "Origins" if input.mode() == "Destination" else "Destinations"
-        plot_bar(ax1, work_filtered,  f"\nWork {label} — {input.selected_sa2()}")
-        plot_bar(ax2, study_filtered, f"\nStudy {label} — {input.selected_sa2()}")
+        plot_bar(ax1, work_filtered[work_filtered["commute_pct"]!=0],  f"\nWork {label} — {input.selected_sa2()} ({year})")
+        plot_bar(ax2, study_filtered[study_filtered["commute_pct"]!=0], f"\nStudy {label} — {input.selected_sa2()} ({year})")
         plt.tight_layout()
         return fig
 
@@ -345,30 +407,33 @@ def server(input, output, session):
     @reactive.event(input.update)
     def commute_chart():
         work_filtered, study_filtered = filter_data()
+        year = input.year()
+        wc   = WORK_COLS[year]
+        sc   = STUDY_COLS[year]
 
         work_mode_cols = {
-            'Work at home': 'work_2023_Work_at_home',
-            'Private car':  'work_2023_Drive_a_private_car_truck_or_van',
-            'Company car':  'work_2023_Drive_a_company_car_truck_or_van',
-            'Passenger':    'work_2023_Passenger_in_a_car_truck_van_or_company_bus',
-            'Public bus':   'work_2023_Public_bus',
-            'Train':        'work_2023_Train',
-            'Bicycle':      'work_2023_Bicycle',
-            'Walk/jog':     'work_2023_Walk_or_jog',
-            'Ferry':        'work_2023_Ferry',
-            'Other':        'work_2023_Other',
+            'Work at home': wc["home"],
+            'Private car':  wc["priv_car"],
+            'Company car':  wc["comp_car"],
+            'Passenger':    wc["passenger"],
+            'Public bus':   wc["bus"],
+            'Train':        wc["train"],
+            'Bicycle':      wc["bicycle"],
+            'Walk/jog':     wc["walk"],
+            'Ferry':        wc["ferry"],
+            'Other':        wc["other"],
         }
         study_mode_cols = {
-            'Study at home': 'study_2023_Study_at_home',
-            'Drive':         'study_2023_Drive_a_car_truck_or_van',
-            'Passenger':     'study_2023_Passenger_in_a_car_truck_or_van',
-            'Bicycle':       'study_2023_Bicycle',
-            'Walk/jog':      'study_2023_Walk_or_jog',
-            'School bus':    'study_2023_School_bus',
-            'Public bus':    'study_2023_Public_bus',
-            'Train':         'study_2023_Train',
-            'Ferry':         'study_2023_Ferry',
-            'Other':         'study_2023_Other',
+            'Study at home': sc["home"],
+            'Drive':         sc["drive"],
+            'Passenger':     sc["passenger"],
+            'Bicycle':       sc["bicycle"],
+            'Walk/jog':      sc["walk"],
+            'School bus':    sc["school_bus"],
+            'Public bus':    sc["bus"],
+            'Train':         sc["train"],
+            'Ferry':         sc["ferry"],
+            'Other':         sc["other"],
         }
         PIE_COLORS = {
             'Work at home':  '#4e79a7', 'Study at home': '#4e79a7',
@@ -391,8 +456,8 @@ def server(input, output, session):
                 colors=[PIE_COLORS[k] for k in work_totals],  autopct="%1.1f%%", startangle=90)
         ax2.pie(study_totals.values(), labels=study_totals.keys(),
                 colors=[PIE_COLORS[k] for k in study_totals], autopct="%1.1f%%", startangle=90)
-        ax1.set_title(f"\nWork Commute Breakdown — {input.selected_sa2()} ({input.mode()})",  fontsize=12)
-        ax2.set_title(f"\nStudy Commute Breakdown — {input.selected_sa2()} ({input.mode()})", fontsize=12)
+        ax1.set_title(f"\nWork Commute Breakdown — {input.selected_sa2()} ({year}, {input.mode()})",  fontsize=12)
+        ax2.set_title(f"\nStudy Commute Breakdown — {input.selected_sa2()} ({year}, {input.mode()})", fontsize=12)
         plt.tight_layout()
         return fig
 
