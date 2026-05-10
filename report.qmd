@@ -44,6 +44,8 @@ The dashboard uses a hierarchical reactive flow to avoid redundant computation. 
 
 ![Reactive Structure Diagram](data\qmd_image\diagram.png)
 
+(Mermaid is not used as it doesn't fit within the page.)
+
 ## Key Functions
 The application revolves around two core reactive calculations:
 
@@ -71,7 +73,6 @@ On the left menu. There are various settings for the user to select from:
 - **Show top SA2s by commuters**: Filters the most/least SA2s. The user can limit the number of SA2s to display. If Most is selected, it will display the top X SA2 origin/destination pairs. If Least is selected, it will display the top X least SA2 origin/destination. If the input box is empty or 0, all SA2s will be displayed. By default, Most is selected. 
 
 Once the user has selected their settings, they need to hit the "Update" button for the map to be updated.
-
 
 Upon hitting the update button. The map will zoom into the selected SA2, and affiliated SA2s will be coloured based on the percentage. The user can use the map zoom control in the top left to pan the map. The views of the two maps are linked for side-by-side comparison. Once the user is done with the current setting, they can enter a new setting and hit update. Alternatively, the user can return to the default view. They can do so by hitting the reset button.
 
