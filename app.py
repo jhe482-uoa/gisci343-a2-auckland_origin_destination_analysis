@@ -173,29 +173,31 @@ app_ui = ui.page_sidebar(
 
 
 def server(input, output, session):
+    work_geodata = GeoData(
+    geo_dataframe=sa2shape2023,
+    style={'color': 'grey', 'fillOpacity': 0.3, 'weight': 1},
+    )
+    study_geodata = GeoData(
+        geo_dataframe=sa2shape2023,
+        style={'color': 'grey', 'fillOpacity': 0.3, 'weight': 1},
+    )
+
     work_m = Map(
         center=(center_y, center_x), zoom=GLOBAL_ZOOM,
-        layers=(basemap_to_tiles(basemaps.CartoDB.Positron),),
+        layers=(basemap_to_tiles(basemaps.CartoDB.Positron), work_geodata),
     )
-    work_m.add_layer(GeoData(
-        geo_dataframe=sa2shape2023,
-        style={'color': 'grey', 'fillOpacity': 0.3, 'weight': 1},
-    ))
-
     study_m = Map(
         center=(center_y, center_x), zoom=GLOBAL_ZOOM,
-        layers=(basemap_to_tiles(basemaps.CartoDB.Positron),),
+        layers=(basemap_to_tiles(basemaps.CartoDB.Positron), study_geodata),
     )
-    study_m.add_layer(GeoData(
-        geo_dataframe=sa2shape2023,
-        style={'color': 'grey', 'fillOpacity': 0.3, 'weight': 1},
-    ))
 
     link((work_m, "center"), (study_m, "center"))
     link((work_m, "zoom"),   (study_m, "zoom"))
 
     register_widget("work_map",  work_m)
     register_widget("study_map", study_m)
+
+
 
     @reactive.calc
     @reactive.event(input.update)
@@ -408,7 +410,7 @@ def server(input, output, session):
                 plot_df = top10
             ax.barh(plot_df[id_col], plot_df["commute_pct"],
                     color=["#bab0ac" if n == "Other" else "#E31A1C" for n in plot_df[id_col]])
-            ax.set_xlabel("% of total commuters")
+            ax.set_xlabel("% of total commuters\n")
             ax.set_title(title)
             ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.1f}%"))
 
