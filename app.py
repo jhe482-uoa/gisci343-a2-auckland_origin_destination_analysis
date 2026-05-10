@@ -15,23 +15,6 @@ _data_dir = Path(__file__).parent / "data"
 work_sa2_data  = pd.read_csv(_data_dir / "2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
 study_sa2_data = pd.read_csv(_data_dir / "2023-census-main-means-of-travel-to-education-by-statistical.csv")
 
-# Data prep
-work_sa2_data.replace(-999, 0, inplace=True)
-study_sa2_data.replace(-999, 0, inplace=True)
-
-work_sa2_data.rename(columns={
-    'SA22023_V1_00_NAME_workplace_address':       'SA2_2023_V1_00_Destination_NAME',
-    'SA22023_V1_00_NAME_usual_residence_address': 'SA2_2023_V1_00_Origin_NAME',
-    '2023_Total_stated': 'work_2023_Total_stated',
-    '2018_Total_stated': 'work_2018_Total_stated'
-}, inplace=True)
-study_sa2_data.rename(columns={
-    'SA22023_V1_00_NAME_educational_institution_address': 'SA2_2023_V1_00_Destination_NAME',
-    'SA22023_V1_00_NAME_usual_residence_address':         'SA2_2023_V1_00_Origin_NAME',
-    '2023_Total_stated': 'study_2023_Total_stated',
-    '2018_Total_stated': 'study_2018_Total_stated'
-}, inplace=True)
-
 sa2shape2023 = gpd.read_file(_data_dir / "aucklandsa2-2023.gpkg")
 sa2shape2023.to_crs(epsg=4326, inplace=True)
 

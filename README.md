@@ -65,3 +65,26 @@ Hosting via GitHub Pages: The live site is hosted using GitHub Pages, configured
 ### 3.2 Live Access
 The dashboard is publicly accessible at the following URL:
 https://jhe482-uoa.github.io/gisci343-a2-auckland_origin_destination_analysis/
+
+
+## 4. Data Acquisition
+The data for this dashboard was sourced from Stats NZ and processed using a combination of GIS software and Python scripts to ensure optimal performance and accuracy.
+
+### 4.1 Spatial Data (Auckland SA2 Boundaries)
+- Source: Statistical Area 2 2023 (Generalised) and Regional Council 2023 (Generalised) datasets from Stats NZ.  
+
+- Processing (ArcGIS Pro): Because the national SA2 dataset does not contain region attributes, the Auckland regional boundary was used as a template. A spatial clip was performed in ArcGIS Pro to extract only the SA2 polygons located within the Auckland Region.
+
+- File: data/aucklandsa2-2023.gpkg.  
+
+### 4.2 Census Data (Origin-Destination Pairs)
+
+- Source: 2023 Census "Main means of travel to work" and "Main means of travel to education" datasets.
+
+- Processing (Python):The data_prep.py script was used to clean the raw CSV files.  
+
+- Value Cleaning: Replaced all -999 (no data/confidentiality suppressed) values with 0 for consistent visualization.  
+
+- Normalization: Renamed inconsistent column headers from the raw Stats NZ format into standardized Origin_NAME and Destination_NAME formats for reactive merging within the app.
+
+- Files: data/2023-census-main-means-of-travel-to-work-by-statistical-area.csv and data/2023-census-main-means-of-travel-to-education-by-statistical.csv.  
