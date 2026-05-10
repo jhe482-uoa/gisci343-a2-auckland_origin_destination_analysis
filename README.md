@@ -88,3 +88,15 @@ The data for this dashboard was sourced from Stats NZ and processed using a comb
 - Normalization: Renamed inconsistent column headers from the raw Stats NZ format into standardized Origin_NAME and Destination_NAME formats for reactive merging within the app.
 
 - Files: data/2023-census-main-means-of-travel-to-work-by-statistical-area.csv and data/2023-census-main-means-of-travel-to-education-by-statistical.csv.  
+
+## 5. Limitations and Future Improvements
+
+Nothing in this world is perfect, and neither is this dashboard. Below highlights a few limitations and future improvements:
+
+- People who "work/study from home" are also included in the calculation of the weighted average travel distance. This may introduce a skew in the actual average distance travelled. However, they are included under the assumption that they are working/studying from home because of inaccessibility (i.e., living too far away).
+
+- The dashboard only uses the SA2 shape from 2023 for both the 2023 and 2018 average distance calculations. The 2023 SA2 shape may have slightly deviated from 2018. Meaning the actual area and the underlying population may differ, leading to false results.
+
+- The coverage of the dashboard is only in Auckland. However, this can easily be updated to include other regions. The reason only Auckland SA2 is included is to reduce data size and improve dashboard performance.
+
+- An additional setting to link/unlink both maps to provide further flexibility for the user.
