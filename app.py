@@ -132,7 +132,7 @@ def determine_color(pct):
 app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.tags.style(".shiny-table th { text-align: left !important; }"),
-        ui.h2("Weighted Average Travel Distance Analysis"),
+        ui.h2("OD Insight: Work & Study Travel Trends"),
         ui.p("Author: Jeff He"),
         ui.card(ui.card_header("How to use this dashboard?"), ui.p("Customize your data view using the settings below. Don't forget to click 'Update' to load the new data :D ")),
         ui.input_radio_buttons("year",  "Census Year", ["2023", "2018"], inline=True),
