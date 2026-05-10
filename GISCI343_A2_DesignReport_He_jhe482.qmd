@@ -12,9 +12,6 @@ format:
 ---
 
 # Motivation and Audience
-•	What problem does your dashboard address?
-•	Who is it for?
-•	What decision or insight does it enable?
 
 This dashboard provides a key indicator to the housing affordability problem. It provides the weighted average travel distance for each SA2 in Auckland. It provides two mode – Origin and Destination. It provides visualization of where the workers/students of a SA2 goes (Origin), or where the workers/students of a SA2 comes from. It provides the visualization in two different years. It calculates the weighted average distance based on the 2023 and 2018 Census data for both workers and students, allowing a side-by-side comparison. 
 This dashboard can be very useful for both Property Developers and Council Urban Planners:
@@ -24,50 +21,66 @@ Council Urban Planners – Council urban planners often tackles a phenomenon– 
 # Data and Preparation
 
 The dataset used for this dashboard are as follow:
-•	2023-census-main-means-of-travel-to-education-by-statistical.csv & 2023-census-main-means-of-travel-to-work-by-statistical-area.csv
+- **2023-census-main-means-of-travel-to-education-by-statistical.csv** & **2023-census-main-means-of-travel-to-work-by-statistical-area.csv**
 The 2023 Census data containing the statistic about how people get to their work/study by SA2, it also contains the 2018 version of the data. This data was directly obtained from Stats NZ. The data was cleaned by replacing all the -999 to 0. -999 is used to denoted no data/0 entries. For visualisation purpose, we replace -999 with 0. Majority of the data are used, including the SA2 name which is used for joining with the spatial data, the commute method and total commuters which are used for visualisation and information supplementary. 
 
-•	aucklandsa2-2023.gpkg
+- **aucklandsa2-2023.gpkg**
 A processed version of Statistical Area 2 2023 (generalised) which can be found on Stats NZ. It is clipped to contain SA2s in Auckland only. This is to performed to improve the performance of the dashboard overall. This also means the coverage of the dashboard is limited to Auckland only. Only the SA22023__1 and shape polygon data is used. SA22023__1 contains the SA2 name and is used to merge with the Census data. The shape polygon data is used to display the SA2s on the map, and used for calculating the distance based on the centroid.
 
 Discuss limitations and spatial reference considerations
 Limitations:
 One limitation identified is the distance is calculated using Straight-Line (Euclidean) Distance. This method provides a easy calculation between the two centroid of any given SA2s. However it doesn’t take into account of the roads. Actual travel distance is very likely to deviate from this.
 Geospatial coordination is handled as following:
-•	iPyleaflet requires ESPG:4326. However aucklandsa2-2023.gpkg is in ESPG:2193 by default. A CRS conversion is performed immediately after loading the data.
-•	When calculating the Euclidean distance of one centroid to another. The CRS is switched back to ESPG:2193 for more accurate distance calculation. 
+- iPyleaflet requires ESPG:4326. However aucklandsa2-2023.gpkg is in ESPG:2193 by default. A CRS conversion is performed immediately after loading the data.
+- When calculating the Euclidean distance of one centroid to another. The CRS is switched back to ESPG:2193 for more accurate distance calculation. 
 
 # Technical Architecture
+## App Structure
+The application is structured around three core components:
+- **UI** — Defines the visual layout and all interactive controls that the user sees and interacts with.
+- **Server** — Contains all the logic. It takes user inputs from the UI, processes data reactively, and returns outputs such as maps, charts, and tables.
+- **App** — The Shiny `App` object that binds the UI and Server together into a running application.
 
-1. App Structure
-The app is a single-file Shiny for Python application with three layers: a global scope for data ingestion, preprocessing, and static constants (WORK_COLS, STUDY_COLS, PIE_COLORS); a UI layer (app_ui) using a page_sidebar layout with a sidebar for temporal/spatial/directional controls and a main panel combining a layout_column_wrap for maps and a navset_card_tab for summaries and data; and a server layer managing reactive state, map initialisation, and all rendering logic.
-2. Reactive Dependency Logic
-The app uses a hierarchical reactive graph to avoid redundant computation. input.update gates all downstream logic, which flows through two shared @reactive.calc nodes — filter_data() (CSV subsetting) and merged_shapes() (geometry join + Top X filter) — before reaching @reactive.effect for map mutations and @render decorators for tables and charts.
+## Reactive Dependency Logic
+The dashboard uses a hierarchical reactive flow to avoid redundant computation. This reactive flow begins upon Update, flowing through two `@reactive.calc` nodes - filter_data() and merged_shapes() - before reaching other functions such as `@reactive.effect` for map modification and `@render` for charts and tables. Because multiple outputs depend on the same filtered data, centralising this logic in reactive calc nodes means the computationally expensive filtering and merging operations execute only once per Update click, with results cached and shared across all functions. See below for a graph visualization.
 
-```{mermaid}
-flowchart LR
-    U([Inputs]) --> F["filter_data()"]
-    F --> G["merged_shapes()"]
-    G --> H["_update_maps()"]
-    G --> J[summary_metrics]
-    F --> K[od_chart]
-    F --> L[commute_chart]
-    F --> M[work / study tbl]
-    R([input.reset]) --> I["_reset_maps()"]
-```
-3. Key Functions
-determine_color(pct) — maps commute share to a five-step choropleth palette. calc_avg_distance() — projects to EPSG:2193 for metric accuracy, then computes ∑di⋅ni∑ni\frac{\sum d_i \cdot n_i}{\sum n_i}
-∑ni​∑di​⋅ni​​ where did_i
-di​ is centroid-to-centroid distance and nin_i
-ni​ is commuter count. make_layer() — factory returning a GeoJSON layer with a closure-based on_hover callback for in-place tooltip updates.
-4. Performance Considerations
-CRS reprojection to WGS84 occurs once at startup; EPSG:2193 is used only within distance calculations. Maps are mutated in-place via batch layer tuple assignment (m.layers = m.layers[:2] + (new_layer, marker)) rather than recreated, avoiding widget re-rendering. @reactive.calc caching ensures filter_data() and merged_shapes() execute once per Update click regardless of how many outputs consume them. DataFrames are filtered before merging with the geometry object to minimise memory during the join.
+![Reactive Structure Diagram](data\qmd_image\diagram.png)
+
+## Key Functions
+The application revolves around two core reactive calculations:
+
+- **filter_data()** — Filters the Census CSV data based on the user's selected SA2, year, and mode. It runs once per Update and its result is shared by all downstream functions, including merged_shapes().
+- **merged_shapes()** — Joins the output of filter_data() with the GeoPandas polygon geometry. Its result drives both the map rendering and the weighted average distance calculation in the summary table.
+
+By making both functions `@reactive.calc`, their outputs are cached after the first execution and reused across all dependent outputs without recomputation.
+
+## Performance Considerations
+Rather than recreating map objects on every Update, the app reuses existing ipyleaflet Map instances in-place by replacing their layers directly. This avoids re-rendering the entire widget and significantly reduces the latency. Additionally, the spatial dataset was clipped to the Auckland region only. The original unclipped dataset covered all SA2 of New Zealand, which introduced unnecessary computational overhead and produced a map dominated by sparsely populated SA2s of little analytical interest.
 
 # User Interface Walkthrough
 
+On the left menu. There are various settings for the user to select from:
+- **Census Year**: Select the Census Year to Visualize on the maps to the right. By default, this is set to 2023.
+- **Mode**: The mode of analysis. Origin analyses where the residence of the selected SA2 goes for work/study. Destination analyses where the workers/students of the selected SA2 comes from. By default, this is set to Origin.
+- **Select SA2**: SA2 of interest. Click to open a drop down menu of all the Auckland SA2s from 2023. It is in alphabetical order. By default, this is set to Auckland University.
+- **Show top SA2s by commuters**: Filters the most/least SA2s. User can limit the number of SA2s to display. If Most is selected, it will display the top X most SA2 origin/destination. If Least is selected, it will display the top X lest SA2 origin/destination. If the input box is empty or 0, all SA2s will be displayed. By default Most is selected. 
+ 
+Once the user has set settings. They need to hit the “Update” button for the map to be updated. Upon hitting the update button. The map will zoom into the selected SA2, and affiliated SA2s will be colored based on the legend displayed on the top left of the map. The user can use the map control on the top right to control the map. The user can pan to move the map.
+Once the user is done with the current configuration. The user can input new configuration and hit update. Alternatively, the user may wish to go back to the default view. They can do so by hitting the reset button.
+ 
+In this case, the user has updated the map with the default configuration (Census Year 2023, Mode: Origin, Select SA2: Auckland SA2, Unfiltered). Both work and study map has updated in accordance. We can see that in this configuration. It is highlighting all the SA2s that the residence of the selected SA2 (Auckland University) goes for work/study. It is also color coded to reflect the intensity based on percentage.
+Scrolling down a little bit to the Summary tab. We can see that there are various insight about the selected SA2. 
+In the Metrics section, we can learn about the underlying work/study population and the weighted average travel distance. For instance, there are 45 workers that lives in the selected SA2 and they travel 0.4km to get to work on a weighted average basis. 
+In the Top 10 OD Chart section. We can learn about the top places that the population goes. In this case for study, it appears that the student population only studies within the selected SA2. 
+In the Commute Mode Analysis. We can learn how the underlying population gets to their destination, and the proportion. In this case, it appears that most workers work from home, and most students walk/jogs to their destination.
+ 
+Here is an example of usage but with a different configuration. Interestingly for the student population, all of them 
+
+
 # Limitations and Future Improvements
 
-People that “work/study from home” is also included in the calculation of the weighted average travel distance. This may introduce a skew in the actual average distance traveled. However they are included under the assumption that the reason why they are working/studying from home is due to inaccessibility (i.e. living too far away).
-The dashboard only uses SA2 shape from 2023 for both the 2023 and 2018 average distance calculation. 2023 SA2 shape may have slightly deviated from 2018. Meaning the actual area and the underlying population may deviate, thus presenting false results.
-The dashboard only shows data from Auckland SA2. However, this can easily be updated to include other SA2s. The reason why only Auckland SA2 is included is because to reduce the data size, and to improve dashboard performance.
+Nothing is perfect in this world and so is this dashboard. Below highlights a few limitation and future improvements:
+- People that “work/study from home” is also included in the calculation of the weighted average travel distance. This may introduce a skew in the actual average distance traveled. However they are included under the assumption that the reason why they are working/studying from home is due to inaccessibility (i.e. living too far away).
+- The dashboard only uses SA2 shape from 2023 for both the 2023 and 2018 average distance calculation. 2023 SA2 shape may have slightly deviated from 2018. Meaning the actual area and the underlying population may deviate, thus presenting false results.
+- The dashboard only shows data from Auckland SA2. However, this can easily be updated to include other SA2s. The reason why only Auckland SA2 is included is because to reduce the data size, and to improve dashboard performance.
 

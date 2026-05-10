@@ -134,7 +134,7 @@ app_ui = ui.page_sidebar(
         ui.tags.style(".shiny-table th { text-align: left !important; }"),
         ui.h2("Weighted Average Travel Distance Analysis"),
         ui.p("Author: Jeff He"),
-        ui.card(ui.card_header("How to use this dashboard?"), ui.p("Please select your subject of interest below, and to hit the 'Update' button to update the changes :D ")),
+        ui.card(ui.card_header("How to use this dashboard?"), ui.p("Customize your data view using the settings below. Don't forget to click 'Update' to load the new data :D ")),
         ui.input_radio_buttons("year",  "Census Year", ["2023", "2018"], inline=True),
         ui.input_radio_buttons("mode",  "Mode",        ["Origin", "Destination"], inline=True),
         ui.input_select(
@@ -228,7 +228,7 @@ def server(input, output, session):
         w_other = WORK_COLS[other]["total"]
         s_other = STUDY_COLS[other]["total"]
 
-        def _merge(filtered, total_col, other_col):
+        def merge(filtered, total_col, other_col):
             merged = sa2shape2023.merge(
                 filtered[[id_col, "commute_pct", total_col, other_col]],
                 left_on="SA22023__1", right_on=id_col,
@@ -242,13 +242,13 @@ def server(input, output, session):
             return merged
 
         return (
-            _merge(work_filtered,  w_total, w_other),
-            _merge(study_filtered, s_total, s_other),
+            merge(work_filtered,  w_total, w_other),
+            merge(study_filtered, s_total, s_other),
         )
 
     @reactive.effect
     @reactive.event(input.update)
-    def _update_maps():
+    def update_maps():
         work_shapes, study_shapes = merged_shapes()
         year          = input.year()
         other         = "2018" if year == "2023" else "2023"
@@ -317,10 +317,18 @@ def server(input, output, session):
         study_m.layers = study_m.layers[:2]
         work_m.center  = (center_y, center_x)
         work_m.zoom    = GLOBAL_ZOOM
+
         for c in list(study_m.controls):
             if isinstance(c, LegendControl):
                 study_m.remove_control(c)
 
+        ui.update_radio_buttons("year",         selected="2023")
+        ui.update_radio_buttons("mode",         selected="Origin")
+        ui.update_select(       "selected_sa2", selected="Auckland-University")
+        ui.update_numeric(      "top_x",        value="")
+        ui.update_radio_buttons("top_x_order",  selected="Most")
+
+        
     @render.table
     @reactive.event(input.update)
     def work_tbl():
