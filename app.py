@@ -2,132 +2,131 @@ from pathlib import Path
 from shiny import App, ui, render, reactive
 import pandas as pd
 import matplotlib.pyplot as plt
-from shinywidgets import output_widget, render_widget
+from shinywidgets import output_widget, render_widget, register_widget
 import geopandas as gpd
-import plotly.graph_objects as go
-import json
+from ipyleaflet import GeoJSON, Map, GeoData, WidgetControl, basemaps, basemap_to_tiles, CircleMarker, link, LegendControl
+from ipywidgets import HTML
 
 GLOBAL_ZOOM = 9
+SA2_ZOOM    = 13
 
 _data_dir = Path(__file__).parent / "data"
 
 work_sa2_data  = pd.read_csv(_data_dir / "2023-census-main-means-of-travel-to-work-by-statistical-area.csv")
 study_sa2_data = pd.read_csv(_data_dir / "2023-census-main-means-of-travel-to-education-by-statistical.csv")
 
+# Data prep
+work_sa2_data.replace(-999, 0, inplace=True)
+study_sa2_data.replace(-999, 0, inplace=True)
+
+work_sa2_data.rename(columns={
+    'SA22023_V1_00_NAME_workplace_address':       'SA2_2023_V1_00_Destination_NAME',
+    'SA22023_V1_00_NAME_usual_residence_address': 'SA2_2023_V1_00_Origin_NAME',
+    '2023_Total_stated': 'work_2023_Total_stated',
+    '2018_Total_stated': 'work_2018_Total_stated'
+}, inplace=True)
+study_sa2_data.rename(columns={
+    'SA22023_V1_00_NAME_educational_institution_address': 'SA2_2023_V1_00_Destination_NAME',
+    'SA22023_V1_00_NAME_usual_residence_address':         'SA2_2023_V1_00_Origin_NAME',
+    '2023_Total_stated': 'study_2023_Total_stated',
+    '2018_Total_stated': 'study_2018_Total_stated'
+}, inplace=True)
+
 sa2shape2023 = gpd.read_file(_data_dir / "aucklandsa2-2023.gpkg")
 sa2shape2023.to_crs(epsg=4326, inplace=True)
 
-BASE_GEOJSON = json.loads(sa2shape2023.to_json())
-SA2_NAMES    = sa2shape2023["SA22023__1"]
-center_x     = sa2shape2023.geometry.centroid.x.mean()
-center_y     = sa2shape2023.geometry.centroid.y.mean()
+_projected = sa2shape2023.to_crs(epsg=2193)
+center_x   = _projected.geometry.centroid.to_crs(epsg=4326).x.mean()
+center_y   = _projected.geometry.centroid.to_crs(epsg=4326).y.mean()
 
 COLORS = ['#67000D', '#EF3B2C', '#FC9272', '#FEE0D2', '#FFFFFF']
-COLORSCALE = [
-    [0.00, COLORS[4]], [0.01, COLORS[4]],
-    [0.01, COLORS[3]], [0.10, COLORS[3]],
-    [0.10, COLORS[2]], [0.25, COLORS[2]],
-    [0.25, COLORS[1]], [0.50, COLORS[1]],
-    [0.50, COLORS[0]], [1.00, COLORS[0]],
-]
-LEGEND_ITEMS = [
-    (">25%",   COLORS[0]),
-    ("10–25%", COLORS[1]),
-    ("5–10%",  COLORS[2]),
-    ("1–5%",   COLORS[3]),
-    ("<1%",    COLORS[4]),
-]
 
-# Column name maps per year
 WORK_COLS = {
     "2023": {
-        "total":    "work_2023_Total_stated",
-        "home":     "work_2023_Work_at_home",
-        "priv_car": "work_2023_Drive_a_private_car_truck_or_van",
-        "comp_car": "work_2023_Drive_a_company_car_truck_or_van",
-        "passenger":"work_2023_Passenger_in_a_car_truck_van_or_company_bus",
-        "bus":      "work_2023_Public_bus",
-        "train":    "work_2023_Train",
-        "bicycle":  "work_2023_Bicycle",
-        "walk":     "work_2023_Walk_or_jog",
-        "ferry":    "work_2023_Ferry",
-        "other":    "work_2023_Other",
+        "total":     "work_2023_Total_stated",
+        "home":      "2023_Work_at_home",
+        "priv_car":  "2023_Drive_a_private_car_truck_or_van",
+        "comp_car":  "2023_Drive_a_company_car_truck_or_van",
+        "passenger": "2023_Passenger_in_a_car_truck_van_or_company_bus",
+        "bus":       "2023_Public_bus",
+        "train":     "2023_Train",
+        "bicycle":   "2023_Bicycle",
+        "walk":      "2023_Walk_or_jog",
+        "ferry":     "2023_Ferry",
+        "other":     "2023_Other",
     },
     "2018": {
-        "total":    "work_2018_Total_stated",
-        "home":     "work_2018_Work_at_home",
-        "priv_car": "work_2018_Drive_a_private_car_truck_or_van",
-        "comp_car": "work_2018_Drive_a_company_car_truck_or_van",
-        "passenger":"work_2018_Passenger_in_a_car_truck_van_or_company_bus",
-        "bus":      "work_2018_Public_bus",
-        "train":    "work_2018_Train",
-        "bicycle":  "work_2018_Bicycle",
-        "walk":     "work_2018_Walk_or_jog",
-        "ferry":    "work_2018_Ferry",
-        "other":    "work_2018_Other",
+        "total":     "work_2018_Total_stated",
+        "home":      "2018_Work_at_home",
+        "priv_car":  "2018_Drive_a_private_car_truck_or_van",
+        "comp_car":  "2018_Drive_a_company_car_truck_or_van",
+        "passenger": "2018_Passenger_in_a_car_truck_van_or_company_bus",
+        "bus":       "2018_Public_bus",
+        "train":     "2018_Train",
+        "bicycle":   "2018_Bicycle",
+        "walk":      "2018_Walk_or_jog",
+        "ferry":     "2018_Ferry",
+        "other":     "2018_Other",
     },
 }
 STUDY_COLS = {
     "2023": {
-        "total":    "study_2023_Total_stated",
-        "home":     "study_2023_Study_at_home",
-        "drive":    "study_2023_Drive_a_car_truck_or_van",
-        "passenger":"study_2023_Passenger_in_a_car_truck_or_van",
-        "bicycle":  "study_2023_Bicycle",
-        "walk":     "study_2023_Walk_or_jog",
-        "school_bus":"study_2023_School_bus",
-        "bus":      "study_2023_Public_bus",
-        "train":    "study_2023_Train",
-        "ferry":    "study_2023_Ferry",
-        "other":    "study_2023_Other",
+        "total":      "study_2023_Total_stated",
+        "home":       "2023_Study_at_home",
+        "drive":      "2023_Drive_a_car_truck_or_van",
+        "passenger":  "2023_Passenger_in_a_car_truck_or_van",
+        "bicycle":    "2023_Bicycle",
+        "walk":       "2023_Walk_or_jog",
+        "school_bus": "2023_School_bus",
+        "bus":        "2023_Public_bus",
+        "train":      "2023_Train",
+        "ferry":      "2023_Ferry",
+        "other":      "2023_Other",
     },
     "2018": {
-        "total":    "study_2018_Total_stated",
-        "home":     "study_2018_Study_at_home",
-        "drive":    "study_2018_Drive_a_car_truck_or_van",
-        "passenger":"study_2018_Passenger_in_a_car_truck_or_van",
-        "bicycle":  "study_2018_Bicycle",
-        "walk":     "study_2018_Walk_or_jog",
-        "school_bus":"study_2018_School_bus",
-        "bus":      "study_2018_Public_bus",
-        "train":    "study_2018_Train",
-        "ferry":    "study_2018_Ferry",
-        "other":    "study_2018_Other",
+        "total":      "study_2018_Total_stated",
+        "home":       "2018_Study_at_home",
+        "drive":      "2018_Drive_a_car_truck_or_van",
+        "passenger":  "2018_Passenger_in_a_car_truck_or_van",
+        "bicycle":    "2018_Bicycle",
+        "walk":       "2018_Walk_or_jog",
+        "school_bus": "2018_School_bus",
+        "bus":        "2018_Public_bus",
+        "train":      "2018_Train",
+        "ferry":      "2018_Ferry",
+        "other":      "2018_Other",
     },
 }
 
+WORK_LABEL_MAP = {
+    'Work at home': "home",  'Private car': "priv_car", 'Company car': "comp_car",
+    'Passenger':    "passenger", 'Public bus': "bus",   'Train':       "train",
+    'Bicycle':      "bicycle",   'Walk/jog':   "walk",  'Ferry':       "ferry",
+    'Other':        "other",
+}
+STUDY_LABEL_MAP = {
+    'Study at home': "home",       'Drive':       "drive",      'Passenger':  "passenger",
+    'Bicycle':       "bicycle",    'Walk/jog':    "walk",       'School bus': "school_bus",
+    'Public bus':    "bus",        'Train':       "train",      'Ferry':      "ferry",
+    'Other':         "other",
+}
+PIE_COLORS = {
+    'Work at home':  '#4e79a7', 'Study at home': '#4e79a7',
+    'Company car':   '#f28e2b', 'Private car':   '#e15759',
+    'Drive':         '#e15759', 'Passenger':     '#ff9da7',
+    'Bicycle':       '#edc948', 'Walk/jog':      '#b07aa1',
+    'School bus':    '#f28e2b', 'Public bus':    '#76b7b2',
+    'Train':         '#59a14f', 'Ferry':         '#9c755f',
+    'Other':         '#bab0ac',
+}
 
-def _build_legend():
-    shapes, annotations = [], []
-    shapes.append(dict(
-        type="rect", xref="paper", yref="paper",
-        x0=0.0, x1=0.12, y0=0.64, y1=1.04,
-        fillcolor="white", opacity=0.9,
-        line=dict(color="grey", width=1),
-        layer="above",
-    ))
-    annotations.append(dict(
-        xref="paper", yref="paper",
-        x=0.01, y=1.01,
-        text="<b>Commuter %</b>",
-        showarrow=False, font=dict(size=12), xanchor="left",
-    ))
-    for i, (label_text, color) in enumerate(LEGEND_ITEMS):
-        y_top = 0.95 - i * 0.065
-        y_bot = y_top - 0.045
-        shapes.append(dict(
-            type="rect", xref="paper", yref="paper",
-            x0=0.01, x1=0.04, y0=y_bot, y1=y_top,
-            fillcolor=color, line=dict(color="grey", width=1),
-            layer="above",
-        ))
-        annotations.append(dict(
-            xref="paper", yref="paper",
-            x=0.05, y=(y_top + y_bot) / 2,
-            text=label_text, showarrow=False,
-            font=dict(size=11), xanchor="left", yanchor="middle",
-        ))
-    return shapes, annotations
+
+def determine_color(pct):
+    if pct > 25: return COLORS[0]
+    if pct > 10: return COLORS[1]
+    if pct > 5:  return COLORS[2]
+    if pct > 1:  return COLORS[3]
+    return COLORS[4]
 
 
 app_ui = ui.page_sidebar(
@@ -135,37 +134,37 @@ app_ui = ui.page_sidebar(
         ui.tags.style(".shiny-table th { text-align: left !important; }"),
         ui.h2("Weighted Average Travel Distance Analysis"),
         ui.p("Author: Jeff He"),
-        ui.input_radio_buttons("year", "Census Year", ["2023", "2018"], inline=True),
-        ui.input_radio_buttons("mode", "Mode", ["Origin", "Destination"], inline=True),
+        ui.card(ui.card_header("How to use this dashboard?"), ui.p("Please select your subject of interest below, and to hit the 'Update' button to update the changes :D ")),
+        ui.input_radio_buttons("year",  "Census Year", ["2023", "2018"], inline=True),
+        ui.input_radio_buttons("mode",  "Mode",        ["Origin", "Destination"], inline=True),
         ui.input_select(
             "selected_sa2", "Select SA2",
-            sorted(SA2_NAMES.unique()), selected="Auckland-University",
+            sorted(sa2shape2023["SA22023__1"].unique()), selected="Auckland-University",
         ),
-        ui.input_numeric("top_x", "Show top X SA2s by commuters", value=None, min=0),
+        ui.input_numeric("top_x", "Show top SA2s by commuters", value=None, min=0),
         ui.input_radio_buttons("top_x_order", "Order", ["Most", "Least"], inline=True),
-        ui.hr(),
         ui.input_action_button("update", "Update"),
         ui.input_action_button("reset",  "Reset"),
     ),
     ui.h3("Spatial Distribution"),
     ui.layout_column_wrap(
-        ui.card(ui.card_header("Work Map"),  output_widget("work_map"),  full_screen=True),
-        ui.card(ui.card_header("Study Map"),  output_widget("study_map"), full_screen=True),
+        ui.card(ui.card_header("Workplace Destinations"), output_widget("work_map"),  full_screen=True),
+        ui.card(ui.card_header("Education Destinations"), output_widget("study_map"), full_screen=True),
         width=1/2,
     ),
     ui.hr(),
     ui.navset_card_tab(
         ui.nav_panel(
             "Summary",
-            ui.card(ui.card_header("Summary Table"),          ui.output_table("summary_metrics")),
-            ui.card(ui.card_header("Top 10 OD Chart"),        ui.output_plot("od_chart")),
-            ui.card(ui.card_header("Commute Mode Analysis"),   ui.output_plot("commute_chart")),
+            ui.card(ui.card_header("Summary Table"),         ui.output_table("summary_metrics")),
+            ui.card(ui.card_header("Top 10 OD Chart"),       ui.output_plot("od_chart")),
+            ui.card(ui.card_header("Commute Mode Analysis"),  ui.output_plot("commute_chart")),
         ),
         ui.nav_panel(
             "Data Tables",
             ui.layout_column_wrap(
-                ui.card(ui.card_header("Work Data"),  ui.output_table("work_tbl")),
-                ui.card(ui.card_header("Study Data"), ui.output_table("study_tbl")),
+                ui.card(ui.card_header("Work Data"), ui.download_button("downloadWork", "Download"),  ui.output_table("work_tbl")),
+                ui.card(ui.card_header("Study Data"), ui.download_button("downloadStudy", "Download"), ui.output_table("study_tbl")),
                 width=1/2,
             ),
         ),
@@ -174,48 +173,29 @@ app_ui = ui.page_sidebar(
 
 
 def server(input, output, session):
+    work_m = Map(
+        center=(center_y, center_x), zoom=GLOBAL_ZOOM,
+        layers=(basemap_to_tiles(basemaps.CartoDB.Positron),),
+    )
+    work_m.add_layer(GeoData(
+        geo_dataframe=sa2shape2023,
+        style={'color': 'grey', 'fillOpacity': 0.3, 'weight': 1},
+    ))
 
-    def _make_map_widget():
-        legend_shapes, legend_annotations = _build_legend()
-        fig = go.FigureWidget()
-        fig.add_trace(go.Choroplethmapbox(
-            geojson=BASE_GEOJSON, locations=SA2_NAMES,
-            z=[0] * len(SA2_NAMES),
-            featureidkey="properties.SA22023__1",
-            colorscale=[[0, "rgba(180,180,180,0.3)"], [1, "rgba(180,180,180,0.3)"]],
-            showscale=False, hoverinfo="skip",
-            marker=dict(line=dict(color="grey", width=1)),
-        ))
-        fig.add_trace(go.Choroplethmapbox(
-            geojson={}, locations=[], z=[],
-            featureidkey="properties.SA22023__1",
-            colorscale=COLORSCALE,
-            zmin=0, zmax=100, showscale=False,
-            marker=dict(line=dict(color="#666", width=1), opacity=0.7),
-        ))
-        fig.add_trace(go.Scattermapbox(
-            lat=[], lon=[], mode="markers",
-            marker=dict(size=12, color="yellow"),
-            showlegend=False,
-        ))
-        fig.update_layout(
-            mapbox=dict(style="carto-positron", center=dict(lat=center_y, lon=center_x), zoom=GLOBAL_ZOOM),
-            margin=dict(l=0, r=0, t=0, b=0),
-            shapes=legend_shapes,
-            annotations=legend_annotations,
-        )
-        return fig
+    study_m = Map(
+        center=(center_y, center_x), zoom=GLOBAL_ZOOM,
+        layers=(basemap_to_tiles(basemaps.CartoDB.Positron),),
+    )
+    study_m.add_layer(GeoData(
+        geo_dataframe=sa2shape2023,
+        style={'color': 'grey', 'fillOpacity': 0.3, 'weight': 1},
+    ))
 
-    work_widget  = _make_map_widget()
-    study_widget = _make_map_widget()
+    link((work_m, "center"), (study_m, "center"))
+    link((work_m, "zoom"),   (study_m, "zoom"))
 
-    @render_widget
-    def work_map():
-        return work_widget
-
-    @render_widget
-    def study_map():
-        return study_widget
+    register_widget("work_map",  work_m)
+    register_widget("study_map", study_m)
 
     @reactive.calc
     @reactive.event(input.update)
@@ -228,6 +208,7 @@ def server(input, output, session):
 
         def _filter(df, total_col):
             f     = df[df[id_col] == selected].copy()
+            f     = f[f[total_col] > 0].copy()
             total = f[total_col].sum()
             f["commute_pct"] = (f[total_col] / total * 100) if total > 0 else 0
             return f
@@ -239,14 +220,13 @@ def server(input, output, session):
     def merged_shapes():
         work_filtered, study_filtered = filter_data()
         year   = input.year()
+        other  = "2018" if year == "2023" else "2023"
         id_col = "SA2_2023_V1_00_Origin_NAME" if input.mode() == "Destination" else "SA2_2023_V1_00_Destination_NAME"
 
-        # For the selected year we show that year's count; the "other" year is for tooltip comparison
-        w_total   = WORK_COLS[year]["total"]
-        s_total   = STUDY_COLS[year]["total"]
-        other     = "2018" if year == "2023" else "2023"
-        w_other   = WORK_COLS[other]["total"]
-        s_other   = STUDY_COLS[other]["total"]
+        w_total = WORK_COLS[year]["total"]
+        s_total = STUDY_COLS[year]["total"]
+        w_other = WORK_COLS[other]["total"]
+        s_other = STUDY_COLS[other]["total"]
 
         def _merge(filtered, total_col, other_col):
             merged = sa2shape2023.merge(
@@ -258,35 +238,13 @@ def server(input, output, session):
             if top_x and top_x > 0:
                 ascending = input.top_x_order() == "Least"
                 merged = merged.sort_values(total_col, ascending=ascending).head(top_x)
+            merged["fill_color"] = merged["commute_pct"].apply(determine_color)
             return merged
 
         return (
             _merge(work_filtered,  w_total, w_other),
             _merge(study_filtered, s_total, s_other),
         )
-
-    def _update_widget(widget, shapes, count_col, other_col, lat, lon, selected_name, year):
-        label = "Workers" if "work" in count_col else "Students"
-        other = "2018" if year == "2023" else "2023"
-        with widget.batch_update():
-            t               = widget.data[1]
-            t.geojson       = json.loads(shapes.to_json())
-            t.locations     = shapes["SA22023__1"]
-            t.z             = shapes["commute_pct"]
-            t.customdata    = shapes[[count_col, other_col, "commute_pct"]].values
-            t.hovertemplate = (
-                "<b>%{location}</b><br>"
-                f"{label} {year}: %{{customdata[0]:,.0f}}<br>"
-                f"{label} {other}: %{{customdata[1]:,.0f}}<br>"
-                "Share: %{customdata[2]:.1f}%"
-                "<extra></extra>"
-            )
-            widget.data[2].lat           = [lat]
-            widget.data[2].lon           = [lon]
-            widget.data[2].text          = [selected_name]
-            widget.data[2].hovertemplate = "<b>%{text}</b> (selected)<extra></extra>"
-            widget.layout.mapbox.center  = dict(lat=lat, lon=lon)
-            widget.layout.mapbox.zoom    = 11
 
     @reactive.effect
     @reactive.event(input.update)
@@ -295,24 +253,73 @@ def server(input, output, session):
         year          = input.year()
         other         = "2018" if year == "2023" else "2023"
         selected_name = input.selected_sa2()
-        row = sa2shape2023[sa2shape2023["SA22023__1"] == selected_name]
-        lat = float(row.geometry.centroid.y.values[0])
-        lon = float(row.geometry.centroid.x.values[0])
+        row           = sa2shape2023[sa2shape2023["SA22023__1"] == selected_name]
+        lat           = float(row.geometry.centroid.y.values[0])
+        lon           = float(row.geometry.centroid.x.values[0])
+        w_total       = WORK_COLS[year]["total"]
+        s_total       = STUDY_COLS[year]["total"]
+        w_other       = WORK_COLS[other]["total"]
+        s_other       = STUDY_COLS[other]["total"]
 
-        _update_widget(work_widget,  work_shapes,  WORK_COLS[year]["total"],  WORK_COLS[other]["total"],  lat, lon, selected_name, year)
-        _update_widget(study_widget, study_shapes, STUDY_COLS[year]["total"], STUDY_COLS[other]["total"], lat, lon, selected_name, year)
+        work_html  = HTML("<i>Hover over a region</i>")
+        study_html = HTML("<i>Hover over a region</i>")
+        for m, h in [(work_m, work_html), (study_m, study_html)]:
+            for c in [c for c in m.controls if isinstance(c, WidgetControl)]:
+                m.remove_control(c)
+            m.add_control(WidgetControl(widget=h, position="topright"))
+
+        if not any(isinstance(c, LegendControl) for c in study_m.controls):
+            study_m.add_control(LegendControl(
+                legend={
+                    ">25%":   COLORS[0], "10-25%": COLORS[1],
+                    "5-10%":  COLORS[2], "1-5%":   COLORS[3], "<1%": COLORS[4],
+                },
+                title="Commuter %", position="bottomright",
+            ))
+
+        def make_layer(shapes, count_col, other_col, tooltip_html):
+            label = "workers" if "work" in count_col.lower() else "students"
+            def on_hover(feature, **kw):
+                p = feature["properties"]
+                tooltip_html.value = (
+                    f"<b>{p['SA22023__1']}</b><br>"
+                    f"{label.capitalize()} {year}: {int(p[count_col]):,}<br>"
+                    f"{label.capitalize()} {other}: {int(p[other_col]):,}<br>"
+                    f"Share: {p['commute_pct']:.1f}%"
+                )
+            layer = GeoJSON(
+                data=shapes.__geo_interface__,
+                hover_style={"fillColor": "cyan", "fillOpacity": 0.8},
+                style_callback=lambda f: {
+                    "fillColor": f["properties"]["fill_color"],
+                    "color": "#666", "weight": 1, "fillOpacity": 0.7,
+                },
+            )
+            layer.on_hover(on_hover)
+            return layer
+
+        new_work_layer  = make_layer(work_shapes,  w_total, w_other, work_html)
+        new_study_layer = make_layer(study_shapes, s_total, s_other, study_html)
+
+        work_marker  = CircleMarker(location=(lat, lon), radius=5, color="yellow", fill_color="yellow", fill_opacity=1.0)
+        study_marker = CircleMarker(location=(lat, lon), radius=5, color="yellow", fill_color="yellow", fill_opacity=1.0)
+
+        work_m.layers  = work_m.layers[:2]  + (new_work_layer,  work_marker)
+        study_m.layers = study_m.layers[:2] + (new_study_layer, study_marker)
+
+        work_m.center = (lat, lon)
+        work_m.zoom   = SA2_ZOOM
 
     @reactive.effect
     @reactive.event(input.reset)
     def _reset_maps():
-        for widget in (work_widget, study_widget):
-            with widget.batch_update():
-                widget.data[1].locations    = []
-                widget.data[1].z            = []
-                widget.data[2].lat          = []
-                widget.data[2].lon          = []
-                widget.layout.mapbox.center = dict(lat=center_y, lon=center_x)
-                widget.layout.mapbox.zoom   = GLOBAL_ZOOM
+        work_m.layers  = work_m.layers[:2]
+        study_m.layers = study_m.layers[:2]
+        work_m.center  = (center_y, center_x)
+        work_m.zoom    = GLOBAL_ZOOM
+        for c in list(study_m.controls):
+            if isinstance(c, LegendControl):
+                study_m.remove_control(c)
 
     @render.table
     @reactive.event(input.update)
@@ -398,8 +405,8 @@ def server(input, output, session):
             ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.1f}%"))
 
         label = "Origins" if input.mode() == "Destination" else "Destinations"
-        plot_bar(ax1, work_filtered[work_filtered["commute_pct"]!=0],  f"\nWork {label} — {input.selected_sa2()} ({year})")
-        plot_bar(ax2, study_filtered[study_filtered["commute_pct"]!=0], f"\nStudy {label} — {input.selected_sa2()} ({year})")
+        plot_bar(ax1, work_filtered[work_filtered["commute_pct"]  != 0], f"\nWork {label} — {input.selected_sa2()} ({year})")
+        plot_bar(ax2, study_filtered[study_filtered["commute_pct"] != 0], f"\nStudy {label} — {input.selected_sa2()} ({year})")
         plt.tight_layout()
         return fig
 
@@ -407,59 +414,50 @@ def server(input, output, session):
     @reactive.event(input.update)
     def commute_chart():
         work_filtered, study_filtered = filter_data()
-        year = input.year()
-        wc   = WORK_COLS[year]
-        sc   = STUDY_COLS[year]
+        sa2  = input.selected_sa2()
+        mode = input.mode()
 
-        work_mode_cols = {
-            'Work at home': wc["home"],
-            'Private car':  wc["priv_car"],
-            'Company car':  wc["comp_car"],
-            'Passenger':    wc["passenger"],
-            'Public bus':   wc["bus"],
-            'Train':        wc["train"],
-            'Bicycle':      wc["bicycle"],
-            'Walk/jog':     wc["walk"],
-            'Ferry':        wc["ferry"],
-            'Other':        wc["other"],
-        }
-        study_mode_cols = {
-            'Study at home': sc["home"],
-            'Drive':         sc["drive"],
-            'Passenger':     sc["passenger"],
-            'Bicycle':       sc["bicycle"],
-            'Walk/jog':      sc["walk"],
-            'School bus':    sc["school_bus"],
-            'Public bus':    sc["bus"],
-            'Train':         sc["train"],
-            'Ferry':         sc["ferry"],
-            'Other':         sc["other"],
-        }
-        PIE_COLORS = {
-            'Work at home':  '#4e79a7', 'Study at home': '#4e79a7',
-            'Company car':   '#f28e2b', 'Private car':   '#e15759',
-            'Drive':         '#e15759', 'Passenger':     '#ff9da7',
-            'Bicycle':       '#edc948', 'Walk/jog':      '#b07aa1',
-            'School bus':    '#f28e2b', 'Public bus':    '#76b7b2',
-            'Train':         '#59a14f', 'Ferry':         '#9c755f',
-            'Other':         '#bab0ac',
-        }
+        def build_mode_cols(cols_dict, label_map):
+            return {label: cols_dict[key] for label, key in label_map.items()}
 
         def get_totals(df, mode_cols):
             return {k: df[v].sum() for k, v in mode_cols.items() if df[v].sum() > 0}
 
-        work_totals  = get_totals(work_filtered,  work_mode_cols)
-        study_totals = get_totals(study_filtered, study_mode_cols)
+        fig, axes = plt.subplots(2, 2, figsize=(14, 12))
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
-        ax1.pie(work_totals.values(),  labels=work_totals.keys(),
-                colors=[PIE_COLORS[k] for k in work_totals],  autopct="%1.1f%%", startangle=90)
-        ax2.pie(study_totals.values(), labels=study_totals.keys(),
-                colors=[PIE_COLORS[k] for k in study_totals], autopct="%1.1f%%", startangle=90)
-        ax1.set_title(f"\nWork Commute Breakdown — {input.selected_sa2()} ({year}, {input.mode()})",  fontsize=12)
-        ax2.set_title(f"\nStudy Commute Breakdown — {input.selected_sa2()} ({year}, {input.mode()})", fontsize=12)
+        plots = [
+            (axes[0, 0], work_filtered,  build_mode_cols(WORK_COLS["2023"],  WORK_LABEL_MAP),  f"\nWork 2023 — {sa2} ({mode})"),
+            (axes[1, 0], work_filtered,  build_mode_cols(WORK_COLS["2018"],  WORK_LABEL_MAP),  f"\nWork 2018 — {sa2} ({mode})"),
+            (axes[0, 1], study_filtered, build_mode_cols(STUDY_COLS["2023"], STUDY_LABEL_MAP), f"\nStudy 2023 — {sa2} ({mode})"),
+            (axes[1, 1], study_filtered, build_mode_cols(STUDY_COLS["2018"], STUDY_LABEL_MAP), f"\nStudy 2018 — {sa2} ({mode})"),
+        ]
+
+        for ax, df, mode_cols, title in plots:
+            totals = get_totals(df, mode_cols)
+            if totals:
+                ax.pie(totals.values(), labels=totals.keys(),
+                       colors=[PIE_COLORS[k] for k in totals],
+                       autopct="%1.1f%%", startangle=90)
+            else:
+                ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            ax.set_title(title, fontsize=12)
+
         plt.tight_layout()
         return fig
+
+    @render.download(
+    filename=lambda: f"work_data_{input.selected_sa2()}_{input.year()}.csv",
+    media_type="text/csv",
+)
+    async def downloadWork():
+        yield filter_data()[0].sort_values(by=WORK_COLS[input.year()]["total"], ascending=False).to_csv(index=False)
+
+    @render.download(
+        filename=lambda: f"study_data_{input.selected_sa2()}_{input.year()}.csv",
+        media_type="text/csv",
+    )
+    async def downloadStudy():
+        yield filter_data()[1].sort_values(by=STUDY_COLS[input.year()]["total"], ascending=False).to_csv(index=False)
 
 
 app = App(app_ui, server)

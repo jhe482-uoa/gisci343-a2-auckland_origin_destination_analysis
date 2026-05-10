@@ -1,0 +1,63 @@
+---
+title: "GISCI 343 Assignment 2: Design Report"
+author: "Jeff He (jhe482)"
+date: today
+format:
+  pdf:
+    documentclass: article
+    geometry: margin=2.5cm
+    fontsize: 11pt
+    number-sections: true
+    toc: false
+---
+
+# Motivation and Audience
+•	What problem does your dashboard address?
+•	Who is it for?
+•	What decision or insight does it enable?
+
+This dashboard provides a key indicator to the housing affordability problem. It provides the weighted average travel distance for each SA2 in Auckland. It provides two mode – Origin and Destination. It provides visualization of where the workers/students of a SA2 goes (Origin), or where the workers/students of a SA2 comes from. It provides the visualization in two different years. It calculates the weighted average distance based on the 2023 and 2018 Census data for both workers and students, allowing a side-by-side comparison. 
+This dashboard can be very useful for both Property Developers and Council Urban Planners:
+Property Developers – Property developers can use this information to identify any economic/education hub, alongside the average distance people travel to get there. Given that people want to live close to their destination. If the average distance is high, this implies a high demand for residential housing nearby that SA2.
+Council Urban Planners – Council urban planners often tackles a phenomenon– spatial mismatch, where low-income household are living far away from economic hubs. For any SA2 that suffers from high average travel distance. Council urban planners can consider upzoning nearby areas to allow higher density residential development. To address housing affordability issue.
+
+# Data and Preparation
+
+The dataset used for this dashboard are as follow:
+•	2023-census-main-means-of-travel-to-education-by-statistical.csv & 2023-census-main-means-of-travel-to-work-by-statistical-area.csv
+The 2023 Census data containing the statistic about how people get to their work/study by SA2, it also contains the 2018 version of the data. This data was directly obtained from Stats NZ. The data was cleaned by replacing all the -999 to 0. -999 is used to denoted no data/0 entries. For visualisation purpose, we replace -999 with 0. Majority of the data are used, including the SA2 name which is used for joining with the spatial data, the commute method and total commuters which are used for visualisation and information supplementary. 
+
+•	aucklandsa2-2023.gpkg
+A processed version of Statistical Area 2 2023 (generalised) which can be found on Stats NZ. It is clipped to contain SA2s in Auckland only. This is to performed to improve the performance of the dashboard overall. This also means the coverage of the dashboard is limited to Auckland only. Only the SA22023__1 and shape polygon data is used. SA22023__1 contains the SA2 name and is used to merge with the Census data. The shape polygon data is used to display the SA2s on the map, and used for calculating the distance based on the centroid.
+
+Discuss limitations and spatial reference considerations
+Limitations:
+One limitation identified is the distance is calculated using Straight-Line (Euclidean) Distance. This method provides a easy calculation between the two centroid of any given SA2s. However it doesn’t take into account of the roads. Actual travel distance is very likely to deviate from this.
+Geospatial coordination is handled as following:
+•	iPyleaflet requires ESPG:4326. However aucklandsa2-2023.gpkg is in ESPG:2193 by default. A CRS conversion is performed immediately after loading the data.
+•	When calculating the Euclidean distance of one centroid to another. The CRS is switched back to ESPG:2193 for more accurate distance calculation. 
+
+# Technical Architecture
+
+```{mermaid}
+flowchart LR
+    U([Inputs]) --> F["filter_data()"]
+    F --> G["merged_shapes()"]
+    G --> H["_update_maps()"]
+    G --> J[summary_metrics]
+    F --> K[od_chart]
+    F --> L[commute_chart]
+    F --> M[work / study tbl]
+    R([input.reset]) --> I["_reset_maps()"]
+```
+
+# User Interface Walkthrough
+
+
+
+# Limitations and Future Improvements
+
+People that “work/study from home” is also included in the calculation of the weighted average travel distance. This may introduce a skew in the actual average distance traveled. However they are included under the assumption that the reason why they are working/studying from home is due to inaccessibility (i.e. living too far away).
+The dashboard only uses SA2 shape from 2023 for both the 2023 and 2018 average distance calculation. 2023 SA2 shape may have slightly deviated from 2018. Meaning the actual area and the underlying population may deviate, thus presenting false results.
+The dashboard only shows data from Auckland SA2. However, this can easily be updated to include other SA2s. The reason why only Auckland SA2 is included is because to reduce the data size, and to improve dashboard performance.
+
