@@ -39,6 +39,11 @@ Geospatial coordination is handled as following:
 
 # Technical Architecture
 
+1. App Structure
+The app is a single-file Shiny for Python application with three layers: a global scope for data ingestion, preprocessing, and static constants (WORK_COLS, STUDY_COLS, PIE_COLORS); a UI layer (app_ui) using a page_sidebar layout with a sidebar for temporal/spatial/directional controls and a main panel combining a layout_column_wrap for maps and a navset_card_tab for summaries and data; and a server layer managing reactive state, map initialisation, and all rendering logic.
+2. Reactive Dependency Logic
+The app uses a hierarchical reactive graph to avoid redundant computation. input.update gates all downstream logic, which flows through two shared @reactive.calc nodes — filter_data() (CSV subsetting) and merged_shapes() (geometry join + Top X filter) — before reaching @reactive.effect for map mutations and @render decorators for tables and charts.
+
 ```{mermaid}
 flowchart LR
     U([Inputs]) --> F["filter_data()"]
@@ -50,10 +55,15 @@ flowchart LR
     F --> M[work / study tbl]
     R([input.reset]) --> I["_reset_maps()"]
 ```
+3. Key Functions
+determine_color(pct) — maps commute share to a five-step choropleth palette. calc_avg_distance() — projects to EPSG:2193 for metric accuracy, then computes ∑di⋅ni∑ni\frac{\sum d_i \cdot n_i}{\sum n_i}
+∑ni​∑di​⋅ni​​ where did_i
+di​ is centroid-to-centroid distance and nin_i
+ni​ is commuter count. make_layer() — factory returning a GeoJSON layer with a closure-based on_hover callback for in-place tooltip updates.
+4. Performance Considerations
+CRS reprojection to WGS84 occurs once at startup; EPSG:2193 is used only within distance calculations. Maps are mutated in-place via batch layer tuple assignment (m.layers = m.layers[:2] + (new_layer, marker)) rather than recreated, avoiding widget re-rendering. @reactive.calc caching ensures filter_data() and merged_shapes() execute once per Update click regardless of how many outputs consume them. DataFrames are filtered before merging with the geometry object to minimise memory during the join.
 
 # User Interface Walkthrough
-
-
 
 # Limitations and Future Improvements
 
