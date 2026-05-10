@@ -1,15 +1,67 @@
 ## 1. Motivation and Audience
 
-### 1.1 What problem does your dashboard address?
+### 1.1 What problem does the dashboard address?
 
 This dashboard addresses the housing affordability problem and the phenomenon of spatial mismatch. It answers a critical question: "Are residents being pushed further away from economic or education hubs over time?". By calculating the weighted average travel distance for Statistical Area 2 (SA2) regions in Auckland, it serves as a key indicator of whether affordable housing is being supplied near high-demand employment and education hubs.  
 
 ### 1.2 Who is it for?
 
 Two possible user for this dashboard could be property developers or council urban planners. Their goal is similar but their role and contribution is different:
+
 Property Developers: To identify economic or education hubs where high travel distances imply a significant demand for new residential housing in closer proximity.  
+
 Council Urban Planners: To identify areas suffering from spatial mismatch-where households are living far away from economic hubs-and to consider upzoning nearby areas for higher-density residential development. 
 
 ### 1.3 What insight does it enable?
 
 Comparison of weighted average travel distance for work and study between 2023 and 2018 Census data, enabling a side-by-side analysis of catchment trends.
+
+
+## 2. Setup and Installation
+To run this dashboard locally for development or testing, follow these steps:
+
+### 2.1 Prerequisites
+- Python: 3.13+
+
+- Install uv: pip install uv
+
+- Install Quarto: http://quarto.org/
+
+### 2.2 Installation Steps
+Clone the repository:
+```bash
+# Clone the repository
+git clone https://github.com/jhe482-uoa/gisci343-a2-auckland_origin_destination_analysis
+cd gisci343-a2-auckland_origin_destination_analysis
+
+# Sync dependencies and activate virtual environment
+uv sync
+source .venv/bin/activate
+```
+
+### 2.3 Running the App
+Execute the following command to launch the Shiny app locally:
+
+```bash
+shiny run --reload app.py
+```
+The app will be available at http://127.0.0.1:8000. Alternatively, refer to the output for the console.
+
+## 3. Deployment
+This dashboard is deployed as a Shinylive application, which allows the entire Python environment to run locally in the user's web browser using WebAssembly. This eliminates the need for a dedicated back-end Python server.
+
+### 3.1 Deployment Workflow
+Static Export: The application was converted from a dynamic Python script into a set of static web files using the shinylive CLI:
+
+```bash
+shinylive export . docs
+```
+This process bundles app.py, your datasets, and the necessary web assets into a standalone directory.
+
+Version Control: The resulting /docs folder was committed and pushed to the main branch of the GitHub repository. This folder contains the HTML, JavaScript, and WebAssembly assets required to host the app.
+
+Hosting via GitHub Pages: The live site is hosted using GitHub Pages, configured to serve content directly from the /docs directory on the main branch.
+
+### 3.2 Live Access
+The dashboard is publicly accessible at the following URL:
+https://jhe482-uoa.github.io/gisci343-a2-auckland_origin_destination_analysis/
